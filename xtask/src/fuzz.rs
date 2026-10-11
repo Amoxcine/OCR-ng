@@ -4,7 +4,8 @@
 //! present). Each iteration mutates a seed, writes it to `fuzz-out/work/`, and runs
 //! `pdfcraft-cli check-one <file> --edit` in a child process with a timeout. That opens,
 //! inspects, renders and extracts text from every page (the bootstrap renderer), then runs our
-//! object layer end to end: decode streams, edit, save incrementally and in full, reopen.
+//! object layer end to end: decode streams, edit, save incrementally and in full, reopen; and
+//! scan editing on scanned pages (analysis, one edit, full save, reopen).
 //!
 //! A child that dies (panic outside a safety net, abort, stack overflow, signal) is a **crash**,
 //! and one that runs past the timeout is a **hang**. Each finding is minimized (chunks are
@@ -188,7 +189,64 @@ fn synthetic_seeds() -> Vec<Vec<u8>> {
             ],
             "/Root 1 0 R",
         ),
+        scan_seed(&build),
     ]
+}
+
+/// A scanned page for the scan-editing paths: a grey image of "lol lol" (bars and rings drawn
+/// where Helvetica 24 pt would put them, one pixel per point) under an invisible text layer.
+fn scan_seed(build: &dyn Fn(&[&str], &str) -> Vec<u8>) -> Vec<u8> {
+    let (w, h) = (200usize, 50usize);
+    let mut px = vec![235u8; w * h];
+    let mut dot = |x: f64, y: f64| {
+        if x >= 0.0 && y >= 0.0 && (x as usize) < w && (y as usize) < h {
+            px[y as usize * w + x as usize] = 30;
+        }
+    };
+    // Baseline 15 pt from the bottom: image row 35. Advances: l 5.33, o 13.34, space 6.67.
+    let base = 35.0;
+    let mut pen = 10.0;
+    for word in ["lol", "lol"] {
+        for c in word.chars() {
+            if c == 'l' {
+                for y in 18..35 {
+                    dot(pen + 1.6, y as f64);
+                    dot(pen + 2.6, y as f64);
+                }
+                pen += 5.33;
+            } else {
+                let (cx, cy) = (pen + 6.7, base - 6.3);
+                for k in 0..400 {
+                    let t = k as f64 / 400.0 * std::f64::consts::TAU;
+                    for r in [0.0, 1.0] {
+                        dot(cx + (5.5 - r) * t.cos(), cy + (6.3 - r) * t.sin());
+                    }
+                }
+                pen += 13.34;
+            }
+        }
+        pen += 6.67;
+    }
+    let hex: String = px.iter().map(|b| format!("{b:02x}")).collect::<String>() + ">";
+    let image = format!(
+        "<< /Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /ASCIIHexDecode /Length {} >>\nstream\n{hex}\nendstream",
+        hex.len()
+    );
+    let content = format!("q {w} 0 0 {h} 0 0 cm /Im1 Do Q BT 3 Tr /F1 24 Tf 10 15 Td (lol lol) Tj ET");
+    let page_content = format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len());
+    build(
+        &[
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            &format!(
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {w} {h}] /Contents 4 0 R /Resources << /XObject << /Im1 5 0 R >> /Font << /F1 6 0 R >> >> >>"
+            ),
+            &page_content,
+            &image,
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        ],
+        "/Root 1 0 R",
+    )
 }
 
 fn seeds() -> Vec<(String, Vec<u8>)> {
@@ -424,4 +482,17 @@ pub fn run(args: &[String]) -> Result<()> {
 
 fn fxhash(b: &[u8]) -> u64 {
     b.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, x| (h ^ u64::from(*x)).wrapping_mul(0x100_0000_01b3))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_scan_seed_is_a_pdf() {
+        let seeds = super::synthetic_seeds();
+        let scan = seeds.last().unwrap();
+        assert!(scan.starts_with(b"%PDF-") && scan.len() < 64 * 1024);
+        if let Some(dir) = std::env::var_os("SCAN_SEED_OUT") {
+            std::fs::write(std::path::Path::new(&dir).join("scan-seed.pdf"), scan).unwrap();
+        }
+    }
 }

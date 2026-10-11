@@ -142,7 +142,16 @@ pub struct Prepared {
     pub raster: Raster,
     pub report: Report,
     line: usize,
+    /// The parts to write, once measured ([`finish`]); empty before.
     rewrites: Vec<source::Rewritten>,
+    encoded: bool,
+}
+
+impl Prepared {
+    /// Whether the parts to write are ready (and the report's sizes known).
+    pub fn is_encoded(&self) -> bool {
+        self.encoded
+    }
 }
 
 /// Edit the analysed scan without touching the document: the new raster and the report,
@@ -153,24 +162,41 @@ pub fn preview(an: &Analysis, target: &Target, text: &str, opts: &Options) -> Re
 
 /// Compose an edit and check it (decision D1 on the picture and on the samples to be written).
 pub fn prepare(an: &Analysis, target: &Target, text: &str, opts: &Options) -> Result<Prepared, ScanError> {
+    finish(an, compose(an, target, text, opts)?)
+}
+
+/// The quick half of [`prepare`]: compose the edit and check decision D1 on the picture. The
+/// report's sizes are unknown until [`finish`].
+pub fn compose(an: &Analysis, target: &Target, text: &str, opts: &Options) -> Result<Prepared, ScanError> {
     let (line, new_text) = resolve(an, target, text)?;
-    let (raster, mut report) = compose::edit_line(an, line, &new_text, opts, seed(an.scan.page, line, &new_text))?;
+    let (raster, report) = compose::edit_line(an, line, &new_text, opts, seed(an.scan.page, line, &new_text))?;
     // Decision D1: nothing outside the zone changed, in the composed picture…
     let outside = changed_outside(&an.scan.raster, &raster, report.zone);
     if outside != 0 {
         return Err(ScanError::Internal(format!("{outside} pixels outside the edited zone changed")));
     }
+    Ok(Prepared { raster, report, line, rewrites: Vec::new(), encoded: false })
+}
+
+/// The slow half of [`prepare`]: encode the parts to write, check decision D1 on their decoded
+/// samples, and measure what they cost.
+pub fn finish(an: &Analysis, mut p: Prepared) -> Result<Prepared, ScanError> {
+    if p.encoded {
+        return Ok(p);
+    }
     // …and in the samples that will be written (decoded, per part).
-    let rewrites = source::encode(&an.scan, &raster)?;
-    let zone = report.zone;
+    let rewrites = source::encode(&an.scan, &p.raster)?;
+    let zone = p.report.zone;
     for r in &rewrites {
         source::verify(&an.scan, r, &|x, y| zone.contains(x, y))?;
     }
-    report.bytes_before = rewrites.iter().map(|r| r.bytes_before).sum();
-    report.bytes_after = rewrites.iter().map(|r| r.bytes_after).sum();
-    report.reencoded = rewrites.iter().filter(|r| r.codec != Codec::Lossless).map(|r| r.codec.name().to_string()).collect();
-    report.reencoded.dedup();
-    Ok(Prepared { raster, report, line, rewrites })
+    p.report.bytes_before = rewrites.iter().map(|r| r.bytes_before).sum();
+    p.report.bytes_after = rewrites.iter().map(|r| r.bytes_after).sum();
+    p.report.reencoded = rewrites.iter().filter(|r| r.codec != Codec::Lossless).map(|r| r.codec.name().to_string()).collect();
+    p.report.reencoded.dedup();
+    p.rewrites = rewrites;
+    p.encoded = true;
+    Ok(p)
 }
 
 /// Replace text in the scan of page `page` (0-based): analyse the page, compose the new line,
@@ -191,6 +217,13 @@ pub fn replace_analysed(doc: &mut Document, an: &Analysis, target: &Target, text
 /// Write an edit prepared on `an`, which must describe `doc`'s current state of the page
 /// (callers that cache check [`page_key`]).
 pub fn apply_prepared(doc: &mut Document, an: &Analysis, prepared: &Prepared) -> Result<Edited, ScanError> {
+    let finished;
+    let prepared = if prepared.encoded {
+        prepared
+    } else {
+        finished = finish(an, prepared.clone())?;
+        &finished
+    };
     let page = an.scan.page;
     let mut report = prepared.report.clone();
     let line = an.lines.get(prepared.line).ok_or(ScanError::NoSuchLine(prepared.line))?;

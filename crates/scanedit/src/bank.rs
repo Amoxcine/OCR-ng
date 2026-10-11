@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use crate::analysis::{Line, Matte, halo, matte};
-use crate::raster::{Mask, Plane, Raster, Rng, median};
+use crate::raster::{Mask, Plane, Raster, Rect, Rng, median};
 
 /// One occurrence of a character.
 #[derive(Clone, Debug, PartialEq)]
@@ -357,12 +357,89 @@ impl Bank {
 pub(crate) fn line_samples(raster: &Raster, line: &Line, li: usize) -> Vec<(usize, Sample)> {
     let m = matte(raster, line.region, line.ink, line.x_height);
     let r = halo(line.x_height);
+    let owners = Owners::of(line, m.region);
     line.glyphs
         .iter()
         .enumerate()
         .filter(|(_, g)| !g.pixels.is_empty() && g.confidence > 0.0)
-        .filter_map(|(gi, _)| Some((gi, sample_of(line, li, gi, &m, r)?)))
+        .filter_map(|(gi, _)| Some((gi, sample_of(line, li, gi, &m, r, &owners)?)))
         .collect()
+}
+
+/// Which glyph each ink pixel of a line belongs to, over the line's region.
+struct Owners {
+    region: Rect,
+    of: Vec<u32>,
+}
+
+impl Owners {
+    const NONE: u32 = u32::MAX;
+    /// Ink of the line that no glyph claims.
+    const STRAY: u32 = u32::MAX - 1;
+
+    fn of(line: &Line, region: Rect) -> Owners {
+        let mut of = vec![Owners::NONE; region.area()];
+        let at = |x: u32, y: u32| -> Option<usize> {
+            let (x, y) = (x as usize, y as usize);
+            region.contains(x, y).then(|| (y - region.y0) * region.width() + (x - region.x0))
+        };
+        for &(x, y) in &line.pixels {
+            if let Some(slot) = at(x, y).and_then(|i| of.get_mut(i)) {
+                *slot = Owners::STRAY;
+            }
+        }
+        for (gi, g) in line.glyphs.iter().enumerate() {
+            for &(x, y) in &g.pixels {
+                if let Some(slot) = at(x, y).and_then(|i| of.get_mut(i)) {
+                    *slot = u32::try_from(gi).unwrap_or(Owners::STRAY);
+                }
+            }
+        }
+        Owners { region, of }
+    }
+
+    fn get(&self, x: usize, y: usize) -> u32 {
+        if !self.region.contains(x, y) {
+            return Owners::NONE;
+        }
+        self.of.get((y - self.region.y0) * self.region.width() + (x - self.region.x0)).copied().unwrap_or(Owners::NONE)
+    }
+}
+
+/// Chessboard distance (capped at `cap + 1`) from every pixel of a `w` × `h` box to the nearest
+/// pixel where `seed` holds.
+fn distances(w: usize, h: usize, cap: usize, seed: impl Fn(usize, usize) -> bool) -> Vec<usize> {
+    let mut d = vec![cap + 1; w * h];
+    let mut queue = std::collections::VecDeque::new();
+    for y in 0..h {
+        for x in 0..w {
+            if seed(x, y)
+                && let Some(v) = d.get_mut(y * w + x)
+            {
+                *v = 0;
+                queue.push_back((x, y));
+            }
+        }
+    }
+    while let Some((x, y)) = queue.pop_front() {
+        let here = d.get(y * w + x).copied().unwrap_or(cap + 1);
+        if here >= cap {
+            continue;
+        }
+        for (dx, dy) in [(-1i64, -1i64), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+            let (Some(nx), Some(ny)) = (x.checked_add_signed(dx as isize), y.checked_add_signed(dy as isize)) else { continue };
+            if nx >= w || ny >= h {
+                continue;
+            }
+            if let Some(v) = d.get_mut(ny * w + nx)
+                && *v > here + 1
+            {
+                *v = here + 1;
+                queue.push_back((nx, ny));
+            }
+        }
+    }
+    d
 }
 
 /// A sample's shape: its ink (α ≥ 0.25) box resampled to 12 × 12, plus its height and width in
@@ -394,18 +471,33 @@ fn descriptor(s: &Sample, x_height: f64) -> Vec<f32> {
     d
 }
 
-fn sample_of(line: &Line, li: usize, gi: usize, m: &Matte, halo: usize) -> Option<Sample> {
+fn sample_of(line: &Line, li: usize, gi: usize, m: &Matte, halo: usize, owners: &Owners) -> Option<Sample> {
     let region = m.region;
     let g = line.glyphs.get(gi)?;
     let bx = g.bbox.expand(halo, usize::MAX, usize::MAX).intersect(&region);
     if bx.is_empty() {
         return None;
     }
-    let mut own = Mask::new(bx.width(), bx.height());
-    for &(x, y) in &g.pixels {
-        own.set((x as usize).saturating_sub(bx.x0), (y as usize).saturating_sub(bx.y0), true);
+    // The glyph's ink and its halo, the halo shared with neighbouring letters by distance: a
+    // pixel nearer another letter's ink is that letter's (else a sample of a tightly set letter
+    // carries a sliver of its neighbour wherever it is drawn).
+    let me = u32::try_from(gi).unwrap_or(Owners::STRAY);
+    let owner = |x: usize, y: usize| owners.get(bx.x0 + x, bx.y0 + y);
+    let (w, h) = (bx.width(), bx.height());
+    let to_me = distances(w, h, halo, |x, y| owner(x, y) == me);
+    let to_others = distances(w, h, halo, |x, y| {
+        let o = owner(x, y);
+        o != me && o != Owners::NONE
+    });
+    let mut own = Mask::new(w, h);
+    for y in 0..h {
+        for x in 0..w {
+            let (dm, d_o) = (to_me.get(y * w + x).copied().unwrap_or(usize::MAX), to_others.get(y * w + x).copied().unwrap_or(0));
+            if dm <= halo && (dm == 0 || dm < d_o) {
+                own.set(x, y, true);
+            }
+        }
     }
-    let own = own.dilate(halo);
     let mut a = Plane::new(bx.width(), bx.height(), 0.0);
     let mut ink: Vec<Plane> = (0..3).map(|_| Plane::new(bx.width(), bx.height(), 0.0)).collect();
     for y in 0..bx.height() {
@@ -445,4 +537,43 @@ fn sample_of(line: &Line, li: usize, gi: usize, m: &Matte, halo: usize) -> Optio
         glyph: gi,
         confidence: g.confidence,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Tightly set, blurred letters: no sample carries ink of its neighbours (it would be drawn
+    /// wherever the sample is used).
+    #[test]
+    fn samples_carry_no_ink_of_their_neighbours() {
+        let spec = crate::synth::Spec {
+            lines: vec!["minimum running sum wins".into()],
+            dpi: 150.0,
+            degrade: crate::synth::Degrade { blur: 1.3, ..Default::default() },
+            ..Default::default()
+        };
+        let f = crate::synth::generate(&spec).unwrap();
+        let doc = pdfcraft_cos::Document::open(std::sync::Arc::new(f.pdf)).unwrap();
+        let an = crate::analyze(&doc, 0).unwrap();
+        let line = &an.lines[0];
+        let m = matte(&an.scan.raster, line.region, line.ink, line.x_height);
+        let r = halo(line.x_height);
+        let owners = Owners::of(line, m.region);
+        let mut checked = 0;
+        for (gi, s) in line_samples(&an.scan.raster, line, 0) {
+            let g = &line.glyphs[gi];
+            let bx = g.bbox.expand(r, usize::MAX, usize::MAX).intersect(&m.region);
+            for y in 0..s.alpha.height {
+                for x in 0..s.alpha.width {
+                    let o = owners.get(bx.x0 + x, bx.y0 + y);
+                    if s.alpha.get(x, y) > 0.0 && o != Owners::NONE {
+                        assert_eq!(o as usize, gi, "'{}' carries ink of glyph {o}", s.ch);
+                    }
+                }
+            }
+            checked += 1;
+        }
+        assert!(checked >= 15, "{checked}");
+    }
 }

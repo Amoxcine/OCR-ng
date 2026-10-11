@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // One trial edit per line.
             let mut ok = 0;
             let mut refusals: std::collections::BTreeMap<String, usize> = Default::default();
-            let mut chosen: Option<(usize, usize, String, scanedit::Report, u128)> = None;
+            let mut chosen: Option<(usize, usize, String, scanedit::Prepared, u128, bool)> = None;
             let vocabulary: Vec<(usize, String)> = an
                 .lines
                 .iter()
@@ -105,11 +105,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .min_by_key(|v| ((v.chars().count() as i64 - n).abs(), v.clone()))
                     .unwrap_or_else(|| w.text.chars().rev().collect());
                 let t = Instant::now();
-                match scanedit::preview(&an, &Target::Word { line: li, word: wi }, &rev, &Default::default()) {
-                    Ok((_, report)) => {
+                // What the user waits for while typing: the composed preview (its size is measured
+                // next, in the background).
+                match scanedit::compose(&an, &Target::Word { line: li, word: wi }, &rev, &Default::default()) {
+                    Ok(prepared) => {
                         ok += 1;
-                        if chosen.is_none() && rev != w.text && w.text.chars().count() >= 4 && w.text.chars().all(char::is_alphanumeric) {
-                            chosen = Some((li, wi, rev, report, t.elapsed().as_millis()));
+                        // The first real-word replacement (OCR can read it back), else the first one.
+                        let real = rev.chars().rev().collect::<String>() != w.text;
+                        let better = chosen.as_ref().is_none_or(|c| !c.5 && real);
+                        if better && rev != w.text && w.text.chars().count() >= 4 && w.text.chars().all(char::is_alphanumeric) {
+                            chosen = Some((li, wi, rev, prepared, t.elapsed().as_millis(), real));
                         }
                     }
                     Err(e) => {
@@ -128,7 +133,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             let refusal_text = refusals.iter().map(|(k, v)| format!("{k} ×{v}")).collect::<Vec<_>>().join(", ");
-            let Some((li, wi, rev, report, edit_ms)) = chosen else {
+            let Some((li, wi, rev, prepared, edit_ms, _)) = chosen else {
                 row(&[
                     desc,
                     format!("{analysis_ms} ms"),
@@ -153,6 +158,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
                 eprintln!("  suspects in style: {}", an.bank(l.style).map_or(0, |b| b.suspect_count));
             }
+            // Its cost, as the interface measures it before Apply is offered.
+            let t = Instant::now();
+            let report = match scanedit::finish(&an, prepared) {
+                Ok(p) => p.report,
+                Err(e) => {
+                    row(&[
+                        desc,
+                        format!("{analysis_ms} ms"),
+                        an.lines.len().to_string(),
+                        format!("{ok}/{}", an.lines.len()),
+                        refusal_text,
+                        format!("size check failed: {e}"),
+                    ]);
+                    continue;
+                }
+            };
+            let cost_ms = t.elapsed().as_millis();
             // Apply it, save, reopen, check.
             let before = scan.raster.clone();
             let t = Instant::now();
@@ -200,7 +222,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             let size = format!("{} → {} B (file {} → {} B)", report.bytes_before, report.bytes_after, bytes.len(), saved.len());
             let edit = format!(
-                "\"{}\" → \"{rev}\": preview {edit_ms} ms, apply {apply_ms} ms, layer {}",
+                "\"{}\" → \"{rev}\": preview {edit_ms} ms, size {cost_ms} ms, apply {apply_ms} ms, layer {}",
                 an.lines[li].words[wi].text,
                 if found_in_layer { "ok" } else { "MISSING" }
             );

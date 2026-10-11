@@ -70,6 +70,8 @@ fn editing_a_scanned_line_through_the_interface() {
     h.run_steps(4);
     let report = h.state().views[0].scan.editor.as_ref().and_then(|e| e.report().cloned()).expect("preview ready");
     assert_eq!(report.new_text, "Meeting moved to room 21 on Tuesday morning.");
+    // Its cost is measured and shown before it can be applied.
+    assert!(report.bytes_before > 0 && report.bytes_after > 0, "{report:?}");
     shot(&mut h, "ui-2-preview");
     // Before/after.
     h.get_by_label("Show original").click();

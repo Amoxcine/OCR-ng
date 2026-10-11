@@ -40,6 +40,22 @@ pub(crate) fn prepared(
     target: &scanedit::Target,
     text: &str,
 ) -> Result<Arc<scanedit::Prepared>, scanedit::ScanError> {
+    let p = composed(key, an, target, text)?;
+    if p.is_encoded() {
+        return Ok(p);
+    }
+    let p = Arc::new(scanedit::finish(an, (*p).clone())?);
+    remember(key, target, text, &p);
+    Ok(p)
+}
+
+/// The composed edit, checked on the picture, without its encoded parts (quick: for previews).
+pub(crate) fn composed(
+    key: u64,
+    an: &scanedit::Analysis,
+    target: &scanedit::Target,
+    text: &str,
+) -> Result<Arc<scanedit::Prepared>, scanedit::ScanError> {
     if let Some((k, t, s, p)) = LAST.lock().unwrap_or_else(|e| e.into_inner()).as_ref()
         && *k == key
         && t == target
@@ -47,9 +63,13 @@ pub(crate) fn prepared(
     {
         return Ok(p.clone());
     }
-    let p = Arc::new(scanedit::prepare(an, target, text, &scanedit::Options::default())?);
-    *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, target.clone(), text.to_string(), p.clone()));
+    let p = Arc::new(scanedit::compose(an, target, text, &scanedit::Options::default())?);
+    remember(key, target, text, &p);
     Ok(p)
+}
+
+fn remember(key: u64, target: &scanedit::Target, text: &str, p: &Arc<scanedit::Prepared>) {
+    *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, target.clone(), text.to_string(), p.clone()));
 }
 
 /// [`Edit::ScanReplaceText`] on the document being edited.
@@ -89,11 +109,19 @@ impl ScanJob {
         analysis(&self.cos, self.page).map(|(_, a)| a)
     }
 
-    /// Compose `text` for `target` without changing anything.
+    /// Compose `text` for `target` without changing anything (quick: the report's sizes are
+    /// unknown until [`ScanJob::cost`]).
     pub fn preview(&self, target: &scanedit::Target, text: &str) -> Result<(Arc<scanedit::Analysis>, Arc<scanedit::Prepared>), scanedit::ScanError> {
         let (key, an) = analysis(&self.cos, self.page)?;
-        let p = prepared(key, &an, target, text)?;
+        let p = composed(key, &an, target, text)?;
         Ok((an, p))
+    }
+
+    /// [`ScanJob::preview`] with the scan's new parts encoded and checked, and their size known
+    /// (applying the edit afterwards reuses them).
+    pub fn cost(&self, target: &scanedit::Target, text: &str) -> Result<Arc<scanedit::Prepared>, scanedit::ScanError> {
+        let (key, an) = analysis(&self.cos, self.page)?;
+        prepared(key, &an, target, text)
     }
 }
 

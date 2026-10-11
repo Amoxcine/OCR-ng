@@ -541,6 +541,7 @@ fn edit_round_trip(bytes: &[u8]) {
     if let Some(root) = doc.root() {
         let _ = doc.update_dict(root, |d| d.set(b"PdfCraftFuzz".to_vec(), Object::Bool(true)));
     }
+    scan_round_trip(&mut doc);
     let classic = SaveOptions { object_streams: false, ..SaveOptions::default() };
     for out in [write_incremental(&doc, &SaveOptions::default()), write_full(&doc, &SaveOptions::default()), write_full(&doc, &classic)]
         .into_iter()
@@ -548,6 +549,27 @@ fn edit_round_trip(bytes: &[u8]) {
     {
         if let Ok(again) = Document::open(Arc::new(out)) {
             let _ = again.root().map(|r| again.get(r));
+        }
+    }
+}
+
+/// Scan editing on the first scanned pages: analyse, replace the first word of the first line
+/// (by itself less its first letter, so its letters exist on the page), and re-analyse the result.
+fn scan_round_trip(doc: &mut pdfcraft_cos::Document) {
+    use pdfcraft_engine::scanedit::{self, Options, ScanError, Target};
+    for page in 0..3 {
+        let an = match scanedit::analyze(doc, page) {
+            Ok(an) => an,
+            Err(ScanError::NoSuchPage(_)) => break,
+            Err(_) => continue,
+        };
+        let Some(word) = an.lines.first().and_then(|l| l.text.split_whitespace().next().map(str::to_string)) else { continue };
+        let shorter: String = word.chars().skip(1).collect();
+        let text = if shorter.is_empty() { word.clone() + &word } else { shorter };
+        let target = Target::Find { text: word, occurrence: 0 };
+        let _ = scanedit::preview(&an, &target, &text, &Options::default());
+        if scanedit::replace_analysed(doc, &an, &target, &text, &Options::default()).is_ok() {
+            let _ = scanedit::analyze(doc, page);
         }
     }
 }

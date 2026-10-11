@@ -45,6 +45,8 @@ struct Preview {
     /// The image's box in user space; drawn over the page only for upright scans.
     rect: [f64; 4],
     upright: bool,
+    /// Whether the report's sizes are known (the scan's new parts encoded and checked).
+    measured: bool,
 }
 
 /// The scanned line being edited.
@@ -57,6 +59,8 @@ pub struct ScanEditor {
     style: usize,
     preview: Option<Preview>,
     pending: Option<(String, Slot<Result<Preview, ScanError>>)>,
+    /// Encoding the previewed edit, to know (and announce) what it costs before it is applied.
+    costing: Option<(String, Slot<Result<Report, ScanError>>)>,
     error: Option<(String, String)>,
     /// The text whose preview was refused (not asked again until it changes).
     failed_for: Option<String>,
@@ -119,6 +123,7 @@ impl ScanView {
             style: l.style,
             preview: None,
             pending: None,
+            costing: None,
             error: None,
             failed_for: None,
             show_original: false,
@@ -372,6 +377,11 @@ pub(crate) fn panel(ctx: &egui::Context, view: &mut DocView, inline: bool) -> Op
         let text = text.clone();
         match take(slot) {
             Some(Ok(p)) => {
+                if !p.measured {
+                    let job = e.job.clone();
+                    let (line, t) = (e.line, p.text.clone());
+                    e.costing = Some((p.text.clone(), spawn(inline, move || job.cost(&Target::Line(line), &t).map(|p| p.report.clone()))));
+                }
                 e.preview = Some(p);
                 e.texture = None;
                 e.error = None;
@@ -383,6 +393,29 @@ pub(crate) fn panel(ctx: &egui::Context, view: &mut DocView, inline: bool) -> Op
                 e.preview = None;
                 e.texture = None;
                 e.pending = None;
+            }
+            None => ctx.request_repaint_after(std::time::Duration::from_millis(60)),
+        }
+    }
+    // The cost of the previewed edit is known.
+    if let Some((text, slot)) = &e.costing {
+        let text = text.clone();
+        match take(slot) {
+            Some(r) => {
+                e.costing = None;
+                match (r, e.preview.as_mut().filter(|p| p.text == text)) {
+                    (Ok(report), Some(p)) => {
+                        p.report = report;
+                        p.measured = true;
+                    }
+                    (Err(err), Some(_)) => {
+                        e.error = Some(explain(&err));
+                        e.failed_for = Some(text.trim().to_string());
+                        e.preview = None;
+                        e.texture = None;
+                    }
+                    _ => {}
+                }
             }
             None => ctx.request_repaint_after(std::time::Duration::from_millis(60)),
         }
@@ -427,6 +460,8 @@ pub(crate) fn panel(ctx: &egui::Context, view: &mut DocView, inline: bool) -> Op
             }
             ui.add_space(4.0);
             let ready = e.preview.as_ref().is_some_and(|p| p.text.trim() == e.text.trim());
+            // Applied only once its cost has been shown.
+            let measured = ready && e.preview.as_ref().is_some_and(|p| p.measured);
             if e.text.trim() == e.original.trim() {
                 ui.label(egui::RichText::new(tl!("Type the corrected text; the preview shows the real result.")).small());
             } else if let Some((what, why)) = &e.error {
@@ -441,12 +476,15 @@ pub(crate) fn panel(ctx: &egui::Context, view: &mut DocView, inline: bool) -> Op
                 });
             } else if let Some(p) = &e.preview {
                 indicators(ui, &p.report, e.style);
+                if !p.measured {
+                    ui.spinner();
+                }
             }
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.toggle_value(&mut e.show_original, tl!("Show original"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add_enabled(ready && e.error.is_none(), egui::Button::new(tl!("Apply"))).clicked() {
+                    if ui.add_enabled(measured && e.error.is_none(), egui::Button::new(tl!("Apply"))).clicked() {
                         apply = true;
                     }
                     if ui.button(tl!("Cancel")).clicked() {
@@ -454,7 +492,7 @@ pub(crate) fn panel(ctx: &egui::Context, view: &mut DocView, inline: bool) -> Op
                     }
                 });
             });
-            if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && ready && e.error.is_none() {
+            if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && measured && e.error.is_none() {
                 apply = true;
             }
         });
@@ -529,5 +567,6 @@ fn preview(job: &ScanJob, line: usize, text: &str) -> Result<Preview, ScanError>
         image,
         rect: [p0[0].min(p1[0]), p0[1].min(p1[1]), p0[0].max(p1[0]), p0[1].max(p1[1])],
         upright: m[1] == 0.0 && m[2] == 0.0 && m[0] > 0.0 && m[3] > 0.0,
+        measured: p.is_encoded(),
     })
 }

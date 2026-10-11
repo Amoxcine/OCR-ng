@@ -271,6 +271,7 @@ fn build_line(raster: &Raster, label: &Label) -> Option<Line> {
                 && !((b.width() as f64) > 2.5 * lh && (b.height() as f64) < 0.15 * lh)
         })
         .collect();
+    let mine = within_band(mine);
     if mine.is_empty() {
         return None;
     }
@@ -782,6 +783,22 @@ pub(crate) struct Matte {
 }
 
 /// The halo around ink that anti-aliasing and blur leave (pixels).
+/// The components of a line without those reaching far above or below its ink band (the
+/// median top to the median bottom of its components): ink of the lines around it, caught when
+/// the text layer's box for this line is too tall. Accents, ascenders and descenders stay well
+/// within one band height of it. A letter touching the other line's ink then goes with it, and
+/// the word is refused rather than drawn with a piece of the other line.
+fn within_band(mine: Vec<Component>) -> Vec<Component> {
+    if mine.len() < 3 {
+        return mine;
+    }
+    let mut tops: Vec<f64> = mine.iter().map(|c| c.bbox.y0 as f64).collect();
+    let mut bottoms: Vec<f64> = mine.iter().map(|c| c.bbox.y1 as f64).collect();
+    let (t, b) = (median(&mut tops), median(&mut bottoms));
+    let h = (b - t).max(1.0);
+    mine.into_iter().filter(|c| c.bbox.y0 as f64 >= t - h && c.bbox.y1 as f64 <= b + h).collect()
+}
+
 pub(crate) fn halo(x_height: f64) -> usize {
     ((0.1 * x_height).round() as usize).clamp(1, 6)
 }
@@ -900,5 +917,25 @@ mod tests {
         pts.push((105.0, 130.0));
         let [a, b] = fit_line(&pts).unwrap();
         assert!((b - 0.02).abs() < 1e-3 && (a - 100.0).abs() < 0.5, "{a} {b}");
+    }
+
+    /// A text-layer box too tall catches ink of the line above: it is not this line's, but an
+    /// accent just above the letters is.
+    #[test]
+    fn ink_of_the_line_above_is_not_this_lines() {
+        let blob = |x0: usize, y0: usize, x1: usize, y1: usize| Component {
+            pixels: (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x as u32, y as u32))).collect(),
+            bbox: Rect::new(x0, y0, x1, y1),
+        };
+        let letters: Vec<Component> = (0..5).map(|i| blob(10 + 20 * i, 100, 22 + 20 * i, 120)).collect();
+        let accent = blob(14, 92, 18, 97);
+        // The letter q of the line above: its descender reaches into this line's box.
+        let above = blob(60, 50, 72, 98);
+        let mut all = letters.clone();
+        all.push(accent);
+        all.push(above);
+        let kept = within_band(all);
+        assert_eq!(kept.len(), 6, "{:?}", kept.iter().map(|c| c.bbox).collect::<Vec<_>>());
+        assert!(kept.iter().all(|c| c.bbox.y0 >= 92));
     }
 }

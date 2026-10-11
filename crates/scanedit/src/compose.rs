@@ -446,6 +446,8 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
     }
 
     // Erase: the ink of removed and moving words.
+    let window = ((line.x_height * 2.4) as usize).clamp(15, 301) | 1;
+    let ink = segment::binarize(raster, work, window);
     let mut sources: Vec<(usize, Mask)> = Vec::new();
     let mut erase = Mask::new(ww, wh);
     for &i in &removed {
@@ -456,6 +458,16 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
             let (px, py) = (px as usize, py as usize);
             if px >= lo && px < hi && work.contains(px, py) && !protected.get(px - work.x0, py - work.y0) {
                 own.set(px - work.x0, py - work.y0, true);
+            }
+        }
+        // Specks of the word's ink too small to count as letters (or cut off one by the
+        // binarisation) go with it, so no fragment of the old word survives (decision D5).
+        for y in line.bbox.y0.max(work.y0)..line.bbox.y1.min(work.y1) {
+            for x in lo.max(work.x0)..hi.min(work.x1) {
+                let (wx, wy) = (x - work.x0, y - work.y0);
+                if ink.get(wx, wy) && !protected.get(wx, wy) {
+                    own.set(wx, wy, true);
+                }
             }
         }
         let mut own = own.dilate(r);
@@ -502,8 +514,7 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
         }
         gap_moves.push((own, dx, dy));
     }
-    let window = ((line.x_height * 2.4) as usize).clamp(15, 301) | 1;
-    let other = segment::binarize(raster, work, window).dilate(r);
+    let other = ink.dilate(r);
     // Just outside the erased ink, pixels darker than the paper are the removed letters' halo
     // (JPEG ringing, scanner blur): left, they'd outline the old text and the fill would pull
     // their grey inwards. They go with the ink.
