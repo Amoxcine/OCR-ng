@@ -955,9 +955,11 @@ impl Iterator for PageTreeIter<'_> {
                     1
                 }
             })
-            .sum();
+            .fold(0usize, usize::saturating_add);
 
-        (nb_pages, Some(nb_pages))
+        // /Count is untrusted: a hint only, and capped, since collectors preallocate the lower
+        // bound (a forged /Count of 2^32 asked for tens of gigabytes).
+        (nb_pages.min(4096), None)
     }
 }
 

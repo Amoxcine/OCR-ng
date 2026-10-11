@@ -1326,6 +1326,27 @@ mod tests {
     }
 
     #[test]
+    fn a_forged_page_count_does_not_preallocate() {
+        // Vendored lopdf patch: the page iterator reported a node's `/Count` as its exact size,
+        // and collecting the pages preallocated it (a fuzzed `/Count 4294967295` asked for
+        // 48 GB and aborted). The hint is now capped and the walk finds the one real page.
+        use lopdf::{Object, dictionary};
+        let mut doc = lopdf::Document::with_version("1.7");
+        let pages_id = doc.new_object_id();
+        let inner_id = doc.new_object_id();
+        let page = doc.add_object(dictionary! { "Type" => "Page", "Parent" => inner_id });
+        doc.objects.insert(
+            inner_id,
+            Object::Dictionary(dictionary! { "Type" => "Pages", "Parent" => pages_id, "Kids" => vec![page.into()], "Count" => 4294967295i64 }),
+        );
+        doc.objects
+            .insert(pages_id, Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![inner_id.into()], "Count" => 4294967295i64 }));
+        let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        doc.trailer.set("Root", catalog);
+        assert_eq!(doc.get_pages().len(), 1);
+    }
+
+    #[test]
     fn empty_png_predictor_frames_do_not_allocate_rows() {
         // usize::MAX cannot be reserved, so the old code safely errors before allocating.
         // An empty frame needs no rows regardless of the declared width.
