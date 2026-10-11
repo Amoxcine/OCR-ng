@@ -22,10 +22,13 @@ pub mod js;
 pub mod links;
 pub mod ocr;
 pub mod optimizer;
+mod scan;
 pub mod signature_image;
 mod upright_image;
 pub mod xfa;
 
+/// Edit text in scanned pages (Edit a PDF ▸ scanned pages).
+pub use pdfcraft_scanedit as scanedit;
 pub use signature_image::{ImageSignaturePreview, SignatureImage};
 
 pub use pdfcraft_organize::{BoxSpec, PageBox, SplitBy, split_ranges};
@@ -347,6 +350,29 @@ impl Document {
     /// Edit a PDF ▸ Edit text: the lines of existing text on `page` (0-based).
     pub fn text_lines(&self, page: usize) -> Vec<pdfcraft_edit::TextLine> {
         self.editor.as_ref().and_then(|e| pdfcraft_edit::text_lines(&e.cos, page).ok()).unwrap_or_default()
+    }
+
+    /// Edit scanned text: what the scan of `page` holds (lines, baselines, blocks, styles and
+    /// the letters each style can be composed from).
+    pub fn scan_analysis(&self, page: usize) -> Result<scanedit::Analysis, scanedit::ScanError> {
+        let e = self
+            .editor
+            .as_ref()
+            .ok_or_else(|| scanedit::ScanError::Pdf(self.read_only_reason.clone().unwrap_or_else(|| "the document can't be edited".into())))?;
+        scanedit::analyze(&e.cos, page)
+    }
+
+    /// Edit scanned text without changing the document: the analysis, the scan as it would be
+    /// and what the edit would do.
+    pub fn scan_preview(
+        &self,
+        page: usize,
+        target: &scanedit::Target,
+        text: &str,
+    ) -> Result<(scanedit::Analysis, scanedit::Raster, scanedit::Report), scanedit::ScanError> {
+        let an = self.scan_analysis(page)?;
+        let (raster, report) = scanedit::preview(&an, target, text, &scanedit::Options::default())?;
+        Ok((an, raster, report))
     }
 
     /// Add alternate text: the figures, in document order.
@@ -1054,6 +1080,13 @@ pub enum Edit {
         page: usize,
         words: Vec<pdfcraft_ocr::PlacedWord>,
     },
+    /// Edit a PDF ▸ scanned pages: change the text of a scan by rewriting its pixels (the old
+    /// letters erased, new ones composed from the page's own letters) and its text layer.
+    ScanReplaceText {
+        page: usize,
+        target: scanedit::Target,
+        text: String,
+    },
     /// Edit a PDF ▸ Edit text: replace the text of line `line` (from `Document::text_lines`) on
     /// `page`, in its own font when it can show it, else in Helvetica.
     EditTextLine {
@@ -1263,6 +1296,7 @@ impl Edit {
             Edit::SetDocumentScript { script: None, .. } => "Delete document JavaScript".into(),
             Edit::SetDocumentScript { .. } => "Edit document JavaScript".into(),
             Edit::EditTextLine { .. } | Edit::EditTextBlock { .. } => "Edit text".into(),
+            Edit::ScanReplaceText { .. } => "Edit scanned text".into(),
             Edit::MoveObjects { objects, .. } => plural("Move object", objects.len()),
             Edit::EditPageImage { change, .. } => match change {
                 ImageEdit::Move(_) => "Move image".into(),
@@ -1441,6 +1475,7 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
         | Edit::SetFieldScript { .. }
         | Edit::ConvertPdfA { .. }
         | Edit::EditTextLine { .. }
+        | Edit::ScanReplaceText { .. }
         | Edit::EditTextBlock { .. }
         | Edit::EditPageImage { .. }
         | Edit::Flatten { .. }
@@ -1679,6 +1714,9 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
         }
         Edit::EditTextLine { page, line, text } => {
             pdfcraft_edit::replace_line(doc, *page, *line, text)?;
+        }
+        Edit::ScanReplaceText { page, target, text } => {
+            scanedit::replace_text(doc, *page, target, text, &scanedit::Options::default())?;
         }
         Edit::SetFieldScript { name, event, script } => {
             pdfcraft_forms::set_field_script(doc, name, event, script.as_deref())?;
@@ -1992,6 +2030,8 @@ pub enum EditError {
     Form(#[from] pdfcraft_forms::FormError),
     #[error(transparent)]
     Redact(#[from] pdfcraft_redact::RedactError),
+    #[error(transparent)]
+    Scan(#[from] scanedit::ScanError),
     #[error("{0}")]
     Print(String),
     #[error("{0}")]

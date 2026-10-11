@@ -3917,3 +3917,52 @@ fn text_extract_with_a_rect_takes_one_column() {
         assert!(matches!(e, ToolError::InvalidArgs(_)), "{bad}: {e}");
     }
 }
+
+/// Edit scanned text end to end: list the scan's lines, preview a change, make it, save, reopen,
+/// undo; refusals say what to do.
+#[test]
+fn editing_scanned_text_through_tools() {
+    use pdfcraft_engine::scanedit::synth;
+    let dir = workdir("scan-edit");
+    let spec =
+        synth::Spec { lines: vec!["Meeting moved to room 12 on Tuesday.".into(), "Please bring the signed forms.".into()], ..Default::default() };
+    std::fs::write(dir.join("scan.pdf"), synth::generate(&spec).unwrap().pdf).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "scan.pdf" }))["doc"].as_u64().unwrap();
+    let lines = ok(&mut a, "scan_lines", json!({ "doc": doc, "page": 1 }));
+    assert_eq!(lines["count"], 2, "{lines}");
+    assert_eq!(lines["lines"][0]["text"], "Meeting moved to room 12 on Tuesday.");
+    assert_eq!(lines["lines"][0]["words"][3], "room");
+    assert_eq!(lines["scan"]["encoding"], "lossless");
+    assert!(lines["styles"][0]["letters"].as_str().unwrap().contains('T'));
+    // The top line sits near the top of the page (top-left-origin points).
+    let top = lines["lines"][0]["rect"][1].as_f64().unwrap();
+    assert!(top > 25.0 && top < 40.0, "{top}");
+
+    let preview = ok(&mut a, "scan_edit_preview", json!({ "doc": doc, "page": 1, "find": "Tuesday", "text": "Thursday", "path": "out/preview.png" }));
+    assert_eq!(preview["new_text"], "Meeting moved to room 12 on Thursday.");
+    assert!(std::fs::read(dir.join("out/preview.png")).unwrap().starts_with(b"\x89PNG"));
+    // A preview changes nothing.
+    assert_eq!(ok(&mut a, "scan_lines", json!({ "doc": doc, "page": 1 }))["lines"][0]["text"], "Meeting moved to room 12 on Tuesday.");
+
+    let r = ok(&mut a, "scan_edit_text", json!({ "doc": doc, "page": 1, "line": 1, "word": 5, "text": "21" }));
+    assert_eq!(r["edit"]["new_text"], "Meeting moved to room 21 on Tuesday.", "{r}");
+    assert!(r["edit"]["changed_pixels"].as_u64().unwrap() > 0);
+    assert_eq!(r["edit"]["zone"].as_array().unwrap().len(), 4);
+    ok(&mut a, "doc_save", json!({ "doc": doc, "path": "out/edited.pdf" }));
+    let mut b = auto(&dir);
+    let re = ok(&mut b, "doc_open", json!({ "path": "out/edited.pdf" }))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut b, "scan_lines", json!({ "doc": re, "page": 1 }))["lines"][0]["text"], "Meeting moved to room 21 on Tuesday.");
+    assert_eq!(ok(&mut a, "edit_undo", json!({ "doc": doc }))["undone"], "Edit scanned text");
+
+    // Refusals an agent can act on.
+    let err = |a: &mut Automation, args: Value| a.call("scan_edit_text", &args).unwrap_err().to_string();
+    assert!(err(&mut a, json!({ "doc": doc, "page": 1, "text": "x" })).contains("line"));
+    assert!(err(&mut a, json!({ "doc": doc, "page": 1, "find": "nowhere", "text": "x" })).contains("not found"));
+    assert!(err(&mut a, json!({ "doc": doc, "page": 1, "find": "room", "text": "Zq" })).contains("no sample"));
+    assert!(err(&mut a, json!({ "doc": doc, "page": 1, "line": 1, "find": "room", "text": "x" })).contains("either"));
+    let plain = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    assert!(a.call("scan_lines", &json!({ "doc": plain, "page": 1 })).unwrap_err().to_string().contains("not a scan"));
+    // --root holds for the preview file.
+    assert!(a.call("scan_edit_preview", &json!({ "doc": doc, "page": 1, "find": "room", "text": "hall", "path": "../escape.png" })).is_err());
+}

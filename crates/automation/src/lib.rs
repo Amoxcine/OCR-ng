@@ -22,6 +22,7 @@ pub mod mcp;
 mod measure;
 mod printing;
 mod redact;
+mod scan;
 mod signing;
 mod tools;
 
@@ -430,6 +431,9 @@ impl Automation {
                     .collect();
                 json!({ "page": page + 1, "count": blocks.len(), "paragraphs": blocks })
             }
+            "scan_lines" => self.scan_lines(&a)?,
+            "scan_edit_text" => self.scan_edit_text(&a)?,
+            "scan_edit_preview" => self.scan_edit_preview(&a)?,
             "text_edit" if a.get("paragraph").is_some() => {
                 let page = self.page(&a)?;
                 let n = self.doc(&a)?.text_blocks(page).len();

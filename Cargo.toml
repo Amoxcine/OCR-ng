@@ -32,6 +32,7 @@ pdfcraft-sign = { path = "crates/sign", version = "0.6.0" }
 pdfcraft-optimize = { path = "crates/optimize", version = "0.6.0" }
 pdfcraft-a11y = { path = "crates/a11y", version = "0.6.0" }
 pdfcraft-ocr = { path = "crates/ocr", version = "0.6.0" }
+pdfcraft-scanedit = { path = "crates/scanedit", version = "0.6.0" }
 pdfcraft-js = { path = "crates/js", version = "0.6.0" }
 pdfcraft-compare = { path = "crates/compare", version = "0.6.0" }
 pdfcraft-preflight = { path = "crates/preflight", version = "0.6.0" }

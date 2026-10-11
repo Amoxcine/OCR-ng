@@ -3712,6 +3712,7 @@ dependencies = [
  "pdfcraft-print",
  "pdfcraft-redact",
  "pdfcraft-render",
+ "pdfcraft-scanedit",
  "pdfcraft-sign",
  "pdfcraft-xfa",
  "pdfcraft-xfdf",
@@ -3875,6 +3876,20 @@ dependencies = [
  "pdfcraft-cos",
  "pdfcraft-fonts",
  "skrifa 0.44.0",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "pdfcraft-scanedit"
+version = "0.6.0"
+dependencies = [
+ "pdfcraft-content",
+ "pdfcraft-cos",
+ "pdfcraft-edit",
+ "pdfcraft-fonts",
+ "pdfcraft-model",
+ "pdfcraft-render",
+ "png 0.18.1",
  "thiserror 2.0.21",
 ]
 

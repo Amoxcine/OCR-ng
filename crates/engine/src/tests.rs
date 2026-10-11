@@ -2990,3 +2990,86 @@ fn recovered_user_passwords_reach_the_renderer_byte_for_byte() {
     assert_eq!(crate::renderer_password(&[0x9A, b'l', 0x9A, b'k', 0xA0]), "ılık€");
     assert_eq!(crate::renderer_password(&[0xC7, b'o', b'k']), "Çok");
 }
+
+/// Edit scanned text: one undoable step that rewrites the scan and its text layer; the saved
+/// file no longer holds the old scan.
+#[test]
+fn scan_text_edit_is_undoable_and_leaves_no_old_pixels() {
+    use crate::scanedit::{Target, synth};
+    let spec =
+        synth::Spec { lines: vec!["Invoice total due within thirty days.".into(), "Thank you for your business.".into()], ..Default::default() };
+    let f = synth::generate(&spec).unwrap();
+    let mut s = Session::new().with_clock(|| 1_700_000_000);
+    let id = s.open("scan.pdf", None, Arc::new(f.pdf.clone()), None).expect("opens");
+    let an = s.get(id).unwrap().scan_analysis(0).unwrap();
+    assert_eq!(an.lines.len(), 2);
+    let report = s.scan_replace_text(id, 0, Target::Find { text: "thirty".into(), occurrence: 0 }, "ninety").unwrap();
+    assert_eq!(report.new_text, "Invoice total due within ninety days.");
+    let after = s.get(id).unwrap().scan_analysis(0).unwrap();
+    assert_eq!(after.lines[0].text, "Invoice total due within ninety days.");
+    assert_ne!(after.scan.raster, an.scan.raster);
+    assert!(s.get(id).unwrap().text_lines(0).iter().any(|l| l.text.contains("ninety")));
+    // The saved file is a full rewrite without the old scan.
+    let saved = s.save_bytes(id).unwrap();
+    let reopened = pdfcraft_cos::Document::open(saved).unwrap();
+    for (_, obj) in reopened.scan_objects() {
+        if let pdfcraft_cos::Object::Stream(st) = &*obj
+            && st.dict.name(b"Subtype") == Some(b"Image")
+        {
+            assert_ne!(st.decoded().unwrap(), an.scan.raster.data);
+        }
+    }
+    assert_eq!(s.undo(id).unwrap(), "Edit scanned text");
+    assert_eq!(s.get(id).unwrap().scan_analysis(0).unwrap().scan.raster, an.scan.raster);
+    s.redo(id).unwrap();
+    assert_eq!(s.get(id).unwrap().scan_analysis(0).unwrap().scan.raster, after.scan.raster);
+    // Errors say what to do.
+    let err = s.scan_replace_text(id, 0, Target::Line(9), "x").unwrap_err();
+    assert!(err.to_string().contains("no line 10"), "{err}");
+}
+
+/// The real path: a scan without a text layer is recognised (OCR models, when installed), its
+/// text edited, and the edit reads back through OCR.
+#[test]
+fn scan_text_edit_after_recognition_reads_back() {
+    use crate::scanedit::{Target, synth};
+    if !crate::ocr::available() {
+        eprintln!("skipped: OCR models not installed");
+        return;
+    }
+    let spec = synth::Spec {
+        lines: vec!["Delivery scheduled for March at noon.".into(), "Contact the front desk on arrival.".into()],
+        dpi: 300.0,
+        font_size: 12.0,
+        leading: 16.0,
+        text_layer: false,
+        ..Default::default()
+    };
+    let f = synth::generate(&spec).unwrap();
+    let mut s = Session::new().with_clock(|| 1_700_000_000);
+    let id = s.open("scan.pdf", None, Arc::new(f.pdf.clone()), None).expect("opens");
+    assert!(matches!(s.get(id).unwrap().scan_analysis(0), Err(crate::scanedit::ScanError::NoText)));
+    s.recognize_text(id, &[], crate::ocr::OcrSettings::default()).unwrap();
+    let an = s.get(id).unwrap().scan_analysis(0).unwrap();
+    assert_eq!(an.lines.len(), 2, "{:?}", an.lines.iter().map(|l| &l.text).collect::<Vec<_>>());
+    s.scan_replace_text(id, 0, Target::Find { text: "March".into(), occurrence: 0 }, "Monday").unwrap();
+    // OCR the edited page afresh: the new word reads back.
+    let saved = s.save_bytes(id).unwrap();
+    let mut fresh = Session::new();
+    let doc = pdfcraft_cos::Document::open(saved).unwrap();
+    let image_only = {
+        let mut d = doc.clone();
+        // Drop the text layer: keep only the image-drawing stream.
+        let pages = pdfcraft_model::pages(&d);
+        let p = &pages[0];
+        let content =
+            pdfcraft_cos::Stream::flate(pdfcraft_cos::Dict::new(), format!("q {} 0 0 {} 0 0 cm /Im0 Do Q", spec.page.0, spec.page.1).as_bytes());
+        let c = d.add(pdfcraft_cos::Object::Stream(content));
+        d.update_dict(p.obj, |dict| dict.set(b"Contents".to_vec(), pdfcraft_cos::Object::Ref(c))).unwrap();
+        pdfcraft_cos::write_full(&d, &Default::default()).unwrap()
+    };
+    let fid = fresh.open("edited.pdf", None, Arc::new(image_only), None).unwrap();
+    let found = fresh.recognize_text(fid, &[], crate::ocr::OcrSettings::default()).unwrap();
+    let text = found[0].text();
+    assert!(text.contains("Monday") && !text.contains("March"), "{text}");
+}

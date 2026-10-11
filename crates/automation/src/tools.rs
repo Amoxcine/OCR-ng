@@ -1051,6 +1051,27 @@ pub fn tools() -> Vec<ToolDef> {
             .destructive()
             .cmd("edit.edit_text")
             .with(schema(json!({ "doc": doc(), "page": { "type": "integer", "minimum": 1 }, "image": { "type": "integer", "minimum": 1 }, "path": { "type": "string" } }), &["doc", "page", "image", "path"])),
+        t("scan_lines", "List scanned text", "What the scan of a page holds (Edit a PDF ▸ scanned pages): the scan (pixel size, colour, dpi, encoding), its lines of text (number, text, words, box in top-left-origin points, x-height in points, skew in degrees, style, block, whether every letter was found), blocks (lines, alignment, leading) and styles (x-height, lines, the letters a new word can be composed from). The text comes from the page's text layer: run ocr_recognize first on a scan without one. Use the line numbers with scan_edit_text.")
+            .ro()
+            .cmd("edit.edit_text")
+            .with(schema(json!({ "doc": doc(), "page": { "type": "integer", "minimum": 1 } }), &["doc", "page"])),
+        t("scan_edit_text", "Edit scanned text", "Change text in a scanned page as if it had been printed that way: the old letters are erased (the paper reconstructed) and the new ones composed from the page's own letters, with its ink, baseline, slope and spacing; nothing outside the edited line changes, and the text layer follows. Say what to change with line (from scan_lines; with word to replace one word) or find (text within one line; occurrence picks the nth match, from 1). Longer or shorter text first takes up the word spacing, then letter spacing within a few percent; text that still doesn't fit is refused (paragraphs aren't reflowed yet), as is a letter the page has no sample of. Lossless and black-and-white scans only (JPEG scans are refused rather than recompressed). The result reports spacing adjustments, warnings and the changed area. The next save rewrites the whole file so the old pixels don't survive. Undoable.")
+            .cmd("edit.edit_text")
+            .with(schema(
+                json!({ "doc": doc(), "page": { "type": "integer", "minimum": 1 }, "text": { "type": "string" },
+                    "line": { "type": "integer", "minimum": 1 }, "word": { "type": "integer", "minimum": 1 },
+                    "find": { "type": "string" }, "occurrence": { "type": "integer", "minimum": 1 } }),
+                &["doc", "page", "text"],
+            )),
+        t("scan_edit_preview", "Preview scanned text edit", "Compose a scan_edit_text change without making it: write the area around the edited line, before (top) and after (bottom), to path as a PNG, and return what the edit would do (same arguments as scan_edit_text, plus path).")
+            .destructive()
+            .cmd("edit.edit_text")
+            .with(schema(
+                json!({ "doc": doc(), "page": { "type": "integer", "minimum": 1 }, "text": { "type": "string" },
+                    "line": { "type": "integer", "minimum": 1 }, "word": { "type": "integer", "minimum": 1 },
+                    "find": { "type": "string" }, "occurrence": { "type": "integer", "minimum": 1 }, "path": { "type": "string" } }),
+                &["doc", "page", "text", "path"],
+            )),
         t("text_paragraphs", "List paragraphs", "The paragraphs on a page (lines grouped by font, size, alignment and spacing): number, text, its line numbers, box (top-left-origin points), font and size. Use the number with text_edit's paragraph.")
             .ro()
             .cmd("edit.edit_text")

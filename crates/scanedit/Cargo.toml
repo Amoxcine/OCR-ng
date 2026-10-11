@@ -1,0 +1,25 @@
+[package]
+name = "pdfcraft-scanedit"
+description = "Edit text in scanned pages: analyse the scan, erase the old words and compose new ones from the page's own letters (L4)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+pdfcraft-cos = { workspace = true }
+pdfcraft-content = { workspace = true }
+pdfcraft-model = { workspace = true }
+pdfcraft-fonts = { workspace = true }
+pdfcraft-edit = { workspace = true }
+# The fixture generator (`synth`) rasterises vector text with the page renderer.
+pdfcraft-render = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Writes before/after crops when SCANEDIT_DUMP names a folder (tests only); already in the tree.
+png = "0.18"
