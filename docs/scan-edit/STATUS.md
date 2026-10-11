@@ -1,6 +1,6 @@
 # Editing scanned text — status
 
-Status: S0–S4 done (headless). Next: S5 (desktop UI). Updated 2026-10-11.
+Status: release candidate `scan-edit-rc1` (S0–S5 plus the addendum's R1–R6). Next: S6. Updated 2026-10-11.
 
 ## Phases
 
@@ -11,11 +11,11 @@ Status: S0–S4 done (headless). Next: S5 (desktop UI). Updated 2026-10-11.
 | S2 | done | Matting (premultiplied ink), glyph bank, centroid spacing model; greedy styles (proper clustering is S6) |
 | S3 | done | Diffusion inpainting + grain, word composition, D1 check on every edit |
 | S4 | done | Rules 1–2, lossless and bitonal rewrite, text layer, undo, tools `scan_lines` / `scan_edit_text` / `scan_edit_preview` |
-| S5 | next | Desktop UI: "Edit scan" mode in Edit text, preview, before/after toggle, indicators |
-| S6 | — | Style clustering (HDBSCAN-like), borrowing between styles with scaling, composed diacritics (e + ´) |
+| S5 | done (RC) | Desktop UI in Edit text: line frames, one-click OCR, live preview off the UI thread, before/after, indicators, refusals with hints (ADR 0009); analysis cache (R2); all codecs rewritten losslessly (R1, ADR 0002); borrowing and composed accents (R4, ADR 0008); real-document validation (R5, [RC-REPORT.md](RC-REPORT.md)) |
+| S6 | next | Style clustering (HDBSCAN-like), separating touching letters (the main refusal on tight text), cedilla by shape |
 | S7 | — | Paragraph reflow (rule 3, Knuth–Plass), overflow options (rule 4) |
 | S8 | — | Patch-based inpainting for textured paper; optional learned tier through `rten` |
-| S9 | — | JPEG: rewrite only the touched MCUs; CCITT/JBIG2 sources |
+| S9 | — | JPEG: rewrite only the touched MCUs; a CCITT G4 encoder for bitonal output (the size overhead, RC-REPORT R1) |
 | S10 | — | Optional ClearScan-style output (`ocr.editable-text-output`) |
 
 ## Measurements
@@ -63,24 +63,26 @@ The real OCR path is tested with the ocrs models installed
 
 ## Known limits
 
-- One line per edit, and a single image per page (the largest, covering at least half of it).
-- No reflow: text that doesn't fit after rules 1–2 is refused (`Overflow`).
-- A letter with no sample in the line's style is refused (`MissingGlyphs`), with no borrowing yet.
-- JPEG, JPX, CCITT and JBIG2 scans are refused, not recompressed (ADR 0002).
-- Text must be dark on light paper. Handwriting and signatures aren't text-layer lines and are
-  never touched.
-- Components shared by two lines (a descender touching the next line's ascender) move with the
-  line that claims them.
-- Analysis runs again for every edit and preview (ADR 0003).
+- One line per edit; no reflow (`Overflow` beyond rules 1–2).
+- Lossless rewrite: colour JPEG scans grow about ×6, very compact JBIG2 up to ×18 (shown before
+  applying). S9.
+- Tightly set or bold text: touching letters are refused (`Segmentation`). S6.
+- Refused on purpose: x-height under 7 px; pages whose text layer contradicts the print
+  (recognised upside down, noise); words running into another line; new ink touching ink that
+  stays.
+- Text must be dark on light paper; handwriting and signatures are never touched. Textured
+  paper is filled smoothly (warning). S8.
+- Cedilla composed only from a recognised ç.
+- Refusal details are English inside translated headings.
 
 ## Next task
 
-S5: an "Edit scan" mode in the Edit text tool (crates/ui-egui) on pages where `scan_analysis`
-succeeds. Click a scanned line to retype it, see the `scan_preview` result before validating,
-toggle before/after, and show indicators (style used, adjustments, warnings). Before that, add an
-in-memory analysis cache in the engine (ADR 0003).
+S6: separate touching letters (the first refusal cause on real pages, RC-REPORT R5) and cluster
+styles properly; then S9 (the size overhead).
 
 ## Log
+
+- 2026-10-11: Release candidate. R1 codecs (lossless rewrite of DCT/JPX/CCITT/JBIG2, Indexed, CMYK, strips, /Rotate), R2 cache, R3 desktop UI, R4 borrowing and accents (also by shape), R5 survey of 10 real PDFs (22 pages) with the fixes it called for and the refusals that make hard pages safe, R6 unsigned RC workflow, user guide, RC report. Synthetic SSIM now 0.90–0.97.
 
 - 2026-10-11: The ocrs models found that real OCR word boxes vary in height, so label lines now
   join on vertical overlap in x order. Word spaces are now spacing observations. Seen alongside:

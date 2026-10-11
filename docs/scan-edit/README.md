@@ -1,6 +1,6 @@
 # Editing text in scanned pages
 
-Status: S0–S4 done, headless (engine, CLI, MCP); no desktop UI yet. See [STATUS.md](STATUS.md).
+Status: release candidate `scan-edit-rc1`: desktop UI, CLI and MCP. See [STATUS.md](STATUS.md), the [user guide](USER-GUIDE.md) and the [RC report](RC-REPORT.md).
 
 Change a word in a scanned page so the page looks as if it had been printed with the new text:
 same letter shapes (wear included), same ink, baseline, slope and spacing. **No pixel outside the
