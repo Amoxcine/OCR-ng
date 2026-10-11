@@ -16,9 +16,15 @@ const GRAIN_BLOCK: usize = 6;
 /// Fill every pixel of `planes` (one per channel, same size) that `known` does not mark, from
 /// the known ones. Known pixels are left exactly as they are.
 pub fn fill(planes: &mut [Plane], known: &Mask) {
+    fill_with(planes, known, SWEEPS);
+}
+
+/// [`fill`] with `sweeps` relaxation sweeps (fewer: smoother estimates, faster; matting only
+/// needs the paper's level, not an invisible repair).
+pub fn fill_with(planes: &mut [Plane], known: &Mask, sweeps: usize) {
     for p in planes.iter_mut() {
         pull_push(p, known);
-        relax(p, known);
+        relax(p, known, sweeps);
     }
 }
 
@@ -106,10 +112,10 @@ fn sample_clamped(p: &Plane, x: f32, y: f32) -> f32 {
     a * (1.0 - ty) + b * ty
 }
 
-fn relax(p: &mut Plane, known: &Mask) {
+fn relax(p: &mut Plane, known: &Mask, sweeps: usize) {
     let (w, h) = (p.width, p.height);
     let unknown: Vec<(usize, usize)> = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|&(x, y)| !known.get(x, y)).collect();
-    for _ in 0..SWEEPS {
+    for _ in 0..sweeps {
         for &(x, y) in &unknown {
             let (mut s, mut n) = (0.0f32, 0.0f32);
             if x > 0 {

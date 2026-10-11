@@ -29,7 +29,7 @@ use pdfcraft_cos::{Document, Object};
 pub use analysis::{Align, Analysis, Block, Glyph, Line, Style, Word, analyze};
 pub use compose::{Options, Report, changed_outside};
 pub use raster::{Raster, Rect};
-pub use source::{Encoding, ScanImage};
+pub use source::{Codec, ColorModel, Part, ScanImage};
 
 #[derive(Debug, thiserror::Error, Clone, PartialEq)]
 pub enum ScanError {
@@ -59,6 +59,8 @@ pub enum ScanError {
     Segmentation(String),
     #[error("{0}")]
     Overflow(String),
+    #[error("{0}")]
+    Collision(String),
     #[error("the edit failed a safety check: {0}")]
     Internal(String),
 }
@@ -133,29 +135,67 @@ fn seed(page: usize, line: usize, text: &str) -> u64 {
     h
 }
 
-/// Edit the analysed scan without touching the document: the new raster and the report.
+/// An edit composed and ready to write: what the preview shows is exactly what is written.
+#[derive(Clone, Debug)]
+pub struct Prepared {
+    pub raster: Raster,
+    pub report: Report,
+    line: usize,
+    rewrites: Vec<source::Rewritten>,
+}
+
+/// Edit the analysed scan without touching the document: the new raster and the report,
+/// including what writing it back would cost.
 pub fn preview(an: &Analysis, target: &Target, text: &str, opts: &Options) -> Result<(Raster, Report), ScanError> {
+    prepare(an, target, text, opts).map(|p| (p.raster, p.report))
+}
+
+/// Compose an edit and check it (decision D1 on the picture and on the samples to be written).
+pub fn prepare(an: &Analysis, target: &Target, text: &str, opts: &Options) -> Result<Prepared, ScanError> {
     let (line, new_text) = resolve(an, target, text)?;
-    let (raster, report) = compose::edit_line(an, line, &new_text, opts, seed(an.scan.page, line, &new_text))?;
-    // Decision D1: nothing outside the zone changed.
+    let (raster, mut report) = compose::edit_line(an, line, &new_text, opts, seed(an.scan.page, line, &new_text))?;
+    // Decision D1: nothing outside the zone changed, in the composed picture…
     let outside = changed_outside(&an.scan.raster, &raster, report.zone);
     if outside != 0 {
         return Err(ScanError::Internal(format!("{outside} pixels outside the edited zone changed")));
     }
-    Ok((raster, report))
+    // …and in the samples that will be written (decoded, per part).
+    let rewrites = source::encode(&an.scan, &raster)?;
+    let zone = report.zone;
+    for r in &rewrites {
+        source::verify(&an.scan, r, &|x, y| zone.contains(x, y))?;
+    }
+    report.bytes_before = rewrites.iter().map(|r| r.bytes_before).sum();
+    report.bytes_after = rewrites.iter().map(|r| r.bytes_after).sum();
+    report.reencoded = rewrites.iter().filter(|r| r.codec != Codec::Lossless).map(|r| r.codec.name().to_string()).collect();
+    report.reencoded.dedup();
+    Ok(Prepared { raster, report, line, rewrites })
 }
 
 /// Replace text in the scan of page `page` (0-based): analyse the page, compose the new line,
-/// write the new image in place of the old one (as a new object: other pages may share it) and
-/// rewrite the line in the text layer. The next save must be a full rewrite, so the old pixels
-/// don't survive in the file (decision D5).
+/// write the changed parts of the scan in place of the old ones (as new objects: other pages
+/// may share them) and rewrite the line in the text layer. The next save must be a full
+/// rewrite, so the old pixels don't survive in the file (decision D5).
 pub fn replace_text(doc: &mut Document, page: usize, target: &Target, text: &str, opts: &Options) -> Result<Edited, ScanError> {
     let an = analyze(doc, page)?;
-    let (line_index, _) = resolve(&an, target, text)?;
-    let (raster, mut report) = preview(&an, target, text, opts)?;
-    let line = an.lines.get(line_index).ok_or(ScanError::NoSuchLine(line_index))?;
-    write_image(doc, &an.scan, &raster)?;
-    if shared(doc, &an.scan) {
+    replace_analysed(doc, &an, target, text, opts)
+}
+
+/// [`replace_text`] with an analysis of the document's current state (from a cache).
+pub fn replace_analysed(doc: &mut Document, an: &Analysis, target: &Target, text: &str, opts: &Options) -> Result<Edited, ScanError> {
+    let prepared = prepare(an, target, text, opts)?;
+    apply_prepared(doc, an, &prepared)
+}
+
+/// Write an edit prepared on `an`, which must describe `doc`'s current state of the page
+/// (callers that cache check [`page_key`]).
+pub fn apply_prepared(doc: &mut Document, an: &Analysis, prepared: &Prepared) -> Result<Edited, ScanError> {
+    let page = an.scan.page;
+    let mut report = prepared.report.clone();
+    let line = an.lines.get(prepared.line).ok_or(ScanError::NoSuchLine(prepared.line))?;
+    let shared_parts = shared(doc, &an.scan, &prepared.rewrites);
+    write_parts(doc, &an.scan, prepared.rewrites.clone())?;
+    if shared_parts {
         report.warnings.push("other pages show the same scan; they keep the original".into());
     }
     // The text layer: the line's old pieces are emptied (from the last, so earlier indices stay
@@ -167,51 +207,91 @@ pub fn replace_text(doc: &mut Document, page: usize, target: &Target, text: &str
     }
     let layer = textlayer::content(&an.scan, &report.words, line.baseline, line.cap_height);
     pdfcraft_edit::stamp(doc, page, "OCR", layer).map_err(|e| ScanError::Pdf(e.to_string()))?;
-    let rewritten = sources;
     doc.require_full_save();
     let z = report.zone;
     let corners = [an.scan.to_user(z.x0 as f64, z.y0 as f64), an.scan.to_user(z.x1 as f64, z.y1 as f64)];
     let zone =
         [corners[0][0].min(corners[1][0]), corners[0][1].min(corners[1][1]), corners[0][0].max(corners[1][0]), corners[0][1].max(corners[1][1])];
-    Ok(Edited { report, zone, text_lines: rewritten })
+    Ok(Edited { report, zone, text_lines: sources })
 }
 
-/// Put `raster` in place of `scan` on its page, as a new image object.
-fn write_image(doc: &mut Document, scan: &ScanImage, raster: &Raster) -> Result<(), ScanError> {
-    let stream = source::encode(scan, raster);
-    // Read it back: what is written must decode to what was composed.
-    let (back, _) = source::decode(doc, &stream)?;
-    let expected = match scan.encoding {
-        Encoding::Lossless => raster.clone(),
-        Encoding::Bitonal => {
-            let mut t = raster.clone();
-            for v in t.data.iter_mut() {
-                *v = if *v >= 128 { 255 } else { 0 };
-            }
-            t
+/// A fingerprint of everything the analysis of page `page` reads: the page dictionary, its
+/// content streams and the images it draws. Equal keys mean an analysis can be reused.
+pub fn page_key(doc: &Document, page: usize) -> u64 {
+    let mut h = Hasher::default();
+    h.write(&page.to_le_bytes());
+    let pages = pdfcraft_model::pages(doc);
+    let Some(p) = pages.get(page) else { return h.finish() };
+    let mut bytes = Vec::new();
+    pdfcraft_cos::serialize(&Object::Dict(p.dict.clone()), &mut bytes);
+    h.write(&bytes);
+    let mut stream = |o: &Object| {
+        if let Object::Stream(s) = &*doc.resolve(o) {
+            let mut d = Vec::new();
+            pdfcraft_cos::serialize(&Object::Dict(s.dict.clone()), &mut d);
+            h.write(&d);
+            h.write(&s.raw);
         }
     };
-    if back != expected {
-        return Err(ScanError::Internal("the rewritten image does not read back as composed".into()));
+    match p.dict.get(b"Contents").map(|c| doc.resolve(c)).as_deref() {
+        Some(Object::Array(a)) => a.iter().for_each(&mut stream),
+        Some(c @ Object::Stream(_)) => stream(c),
+        _ => {}
     }
-    let new_ref = doc.add(Object::Stream(stream));
+    let xo = p.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().and_then(|d| d.get(b"XObject")).map(|x| doc.resolve(x)));
+    if let Some(d) = xo.as_deref().and_then(Object::as_dict) {
+        for (_, v) in d.iter() {
+            stream(v);
+        }
+    }
+    h.finish()
+}
+
+/// A fast 64-bit hash (8 bytes at a time); enough to tell page states apart.
+#[derive(Default)]
+struct Hasher(u64);
+
+impl Hasher {
+    fn write(&mut self, data: &[u8]) {
+        let (chunks, rest) = data.as_chunks::<8>();
+        for c in chunks {
+            self.0 = (self.0 ^ u64::from_le_bytes(*c)).wrapping_mul(0x9E37_79B9_7F4A_7C15).rotate_left(29);
+        }
+        for b in rest {
+            self.0 = (self.0 ^ u64::from(*b)).wrapping_mul(0x0100_0000_01B3);
+        }
+        self.0 ^= data.len() as u64;
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+/// Put the rewritten parts in place of the old ones on the scan's page, as new image objects.
+fn write_parts(doc: &mut Document, scan: &ScanImage, rewrites: Vec<source::Rewritten>) -> Result<(), ScanError> {
     let pages = pdfcraft_model::pages(doc);
     let pg = pages.get(scan.page).ok_or(ScanError::NoSuchPage(scan.page))?;
     let mut res = pg.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
     let mut xo = res.get(b"XObject").map(|x| doc.resolve(x)).and_then(|x| x.as_dict().cloned()).unwrap_or_default();
-    xo.set(scan.name.as_bytes().to_vec(), Object::Ref(new_ref));
+    for r in rewrites {
+        let name = scan.parts.get(r.part).map(|p| p.name.clone()).ok_or_else(|| ScanError::Internal("no such part".into()))?;
+        let new_ref = doc.add(Object::Stream(r.stream));
+        xo.set(name.into_bytes(), Object::Ref(new_ref));
+    }
     res.set(b"XObject".to_vec(), Object::Dict(xo));
     doc.update_dict(pg.obj, |d| d.set(b"Resources".to_vec(), Object::Dict(res))).map_err(|e| ScanError::Pdf(e.to_string()))
 }
 
-/// Whether another page draws the same image object.
-fn shared(doc: &Document, scan: &ScanImage) -> bool {
+/// Whether another page draws one of the rewritten images.
+fn shared(doc: &Document, scan: &ScanImage, rewrites: &[source::Rewritten]) -> bool {
+    let objects: Vec<pdfcraft_cos::ObjRef> = rewrites.iter().filter_map(|r| scan.parts.get(r.part).map(|p| p.object)).collect();
     pdfcraft_model::pages(doc).iter().enumerate().filter(|(i, _)| *i != scan.page).any(|(_, p)| {
         p.dict
             .get(b"Resources")
             .map(|r| doc.resolve(r))
             .and_then(|r| r.as_dict().and_then(|d| d.get(b"XObject")).map(|x| doc.resolve(x)))
-            .and_then(|x| x.as_dict().map(|d| d.iter().any(|(_, v)| v.as_ref() == Some(scan.object))))
+            .and_then(|x| x.as_dict().map(|d| d.iter().any(|(_, v)| v.as_ref().is_some_and(|r| objects.contains(&r)))))
             .unwrap_or(false)
     })
 }

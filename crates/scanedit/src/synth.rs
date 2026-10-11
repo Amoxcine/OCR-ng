@@ -58,6 +58,10 @@ pub struct Spec {
     pub word_layer: bool,
     /// Whether the scan gets a text layer at all (without one, it must be recognised first).
     pub text_layer: bool,
+    /// The text layer's lines when they differ from the printed ones (OCR that missed a mark).
+    pub layer_lines: Option<Vec<String>>,
+    /// Lines with an underline (touching the descenders).
+    pub underline: Vec<usize>,
 }
 
 impl Default for Spec {
@@ -76,6 +80,8 @@ impl Default for Spec {
             degrade: Degrade::default(),
             word_layer: false,
             text_layer: true,
+            layer_lines: None,
+            underline: Vec::new(),
         }
     }
 }
@@ -130,7 +136,11 @@ fn text_content(spec: &Spec, invisible: bool) -> String {
     let m = [c, s, -s, c, cx - c * cx + s * cy, cy - s * cx - c * cy];
     let mut out = format!("q {} cm\n", m.iter().map(|v| num(*v)).collect::<Vec<_>>().join(" "));
     let fs = spec.font_size;
-    for (i, line) in spec.lines.iter().enumerate() {
+    let lines = match (&spec.layer_lines, invisible) {
+        (Some(l), true) => l,
+        _ => &spec.lines,
+    };
+    for (i, line) in lines.iter().enumerate() {
         let y = h - spec.margin.1 - i as f64 * spec.leading;
         let spaces = line.matches(' ').count();
         let natural = pdfcraft_fonts::helvetica_width(line, fs);

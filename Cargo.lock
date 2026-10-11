@@ -3883,6 +3883,7 @@ dependencies = [
 name = "pdfcraft-scanedit"
 version = "0.6.0"
 dependencies = [
+ "hayro-syntax",
  "pdfcraft-content",
  "pdfcraft-cos",
  "pdfcraft-edit",

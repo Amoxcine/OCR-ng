@@ -3933,7 +3933,7 @@ fn editing_scanned_text_through_tools() {
     assert_eq!(lines["count"], 2, "{lines}");
     assert_eq!(lines["lines"][0]["text"], "Meeting moved to room 12 on Tuesday.");
     assert_eq!(lines["lines"][0]["words"][3], "room");
-    assert_eq!(lines["scan"]["encoding"], "lossless");
+    assert_eq!(lines["scan"]["codecs"][0], "lossless");
     assert!(lines["styles"][0]["letters"].as_str().unwrap().contains('T'));
     // The top line sits near the top of the page (top-left-origin points).
     let top = lines["lines"][0]["rect"][1].as_f64().unwrap();

@@ -329,6 +329,39 @@ impl Rng {
     }
 }
 
+/// `f` over `items`, in order, spread over the machine's cores (one at a time on the web, which
+/// has no threads). A worker that panics doesn't take the caller down: its share is computed
+/// again here, and a second panic surfaces to the caller's guard as any other would.
+pub fn par_map<T: Sync, R: Send>(items: &[T], f: impl Fn(usize, &T) -> R + Sync) -> Vec<R> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).min(8);
+        if threads > 1 && items.len() > 1 {
+            let chunk = items.len().div_ceil(threads);
+            let results: Vec<Option<Vec<R>>> = std::thread::scope(|sc| {
+                let handles: Vec<_> = items
+                    .chunks(chunk)
+                    .enumerate()
+                    .map(|(ci, part)| {
+                        let f = &f;
+                        sc.spawn(move || part.iter().enumerate().map(|(i, t)| f(ci * chunk + i, t)).collect::<Vec<R>>())
+                    })
+                    .collect();
+                handles.into_iter().map(|h| h.join().ok()).collect()
+            });
+            let mut out = Vec::with_capacity(items.len());
+            for (ci, r) in results.into_iter().enumerate() {
+                match r {
+                    Some(v) => out.extend(v),
+                    None => out.extend(items.iter().enumerate().skip(ci * chunk).take(chunk).map(|(i, t)| f(i, t))),
+                }
+            }
+            return out;
+        }
+    }
+    items.iter().enumerate().map(|(i, t)| f(i, t)).collect()
+}
+
 /// The median of `v` (reordered); 0 when empty.
 pub fn median(v: &mut [f64]) -> f64 {
     if v.is_empty() {

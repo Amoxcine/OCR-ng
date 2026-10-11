@@ -59,12 +59,15 @@ impl Automation {
             "composed_letters": r.composed_letters,
             "adjustments": r.adjustments,
             "warnings": r.warnings,
+            "bytes_before": r.bytes_before,
+            "bytes_after": r.bytes_after,
+            "rewritten_without_loss": r.reencoded,
         }))
     }
 
     pub(crate) fn scan_lines(&self, a: &Args) -> Result<Value> {
         let page = self.page(a)?;
-        let an: Analysis = self.doc(a)?.scan_analysis(page).map_err(failed)?;
+        let an: std::sync::Arc<Analysis> = self.doc(a)?.scan_analysis(page).map_err(failed)?;
         let scan = &an.scan;
         let ppp = scan.pixels_per_point();
         let mut lines = Vec::new();
@@ -96,13 +99,10 @@ impl Automation {
                 json!({ "style": i + 1, "x_height": round(s.x_height / ppp), "lines": s.lines.iter().map(|l| l + 1).collect::<Vec<_>>(), "letters": letters })
             })
             .collect();
-        let encoding = match scan.encoding {
-            pdfcraft_engine::scanedit::Encoding::Lossless => "lossless",
-            pdfcraft_engine::scanedit::Encoding::Bitonal => "bitonal",
-        };
+        let codecs: Vec<&str> = scan.parts.iter().map(|p| p.codec.name()).collect();
         Ok(json!({
             "page": page + 1,
-            "scan": { "width": scan.raster.width, "height": scan.raster.height, "color": scan.raster.channels == 3, "encoding": encoding, "dpi": round(ppp * 72.0) },
+            "scan": { "width": scan.raster.width, "height": scan.raster.height, "color": scan.raster.channels == 3, "codecs": codecs, "parts": scan.parts.len(), "bitonal": scan.bitonal(), "dpi": round(ppp * 72.0) },
             "count": lines.len(),
             "lines": lines,
             "blocks": blocks,

@@ -19,6 +19,9 @@ pdfcraft-edit = { workspace = true }
 # The fixture generator (`synth`) rasterises vector text with the page renderer.
 pdfcraft-render = { workspace = true }
 thiserror = { workspace = true }
+# Decodes JPEG, JPEG 2000, CCITT and JBIG2 scans with the renderer's own codecs (already in the
+# tree through pdfcraft-render).
+hayro-syntax = { workspace = true }
 
 [dev-dependencies]
 # Writes before/after crops when SCANEDIT_DUMP names a folder (tests only); already in the tree.

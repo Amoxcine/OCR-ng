@@ -61,7 +61,8 @@ fn finds_the_scan_and_maps_it_to_the_page() {
     let scan = source::find(&doc, 0).unwrap();
     assert_eq!((scan.raster.width, scan.raster.height), (f.raster.width, f.raster.height));
     assert_eq!(scan.raster, f.raster);
-    assert_eq!(scan.encoding, Encoding::Lossless);
+    assert_eq!(scan.parts.len(), 1);
+    assert_eq!(scan.parts[0].codec, Codec::Lossless);
     // Top-left pixel corner is the page's top-left corner.
     let tl = scan.to_user(0.0, 0.0);
     assert!((tl[0]).abs() < 1e-6 && (tl[1] - f.spec.page.1).abs() < 1e-6, "{tl:?}");
@@ -245,10 +246,10 @@ fn skewed_scans_follow_the_slope() {
 fn bitonal_scans_stay_bitonal() {
     let spec = Spec { degrade: Degrade { bitonal: true, blur: 0.6, noise: 0.0, paper: [255.0; 3], ..Degrade::default() }, ..paragraph() };
     let (_, mut doc) = fixture(&spec);
-    assert_eq!(source::find(&doc, 0).unwrap().encoding, Encoding::Bitonal);
+    assert!(source::find(&doc, 0).unwrap().bitonal());
     replace_text(&mut doc, 0, &Target::Find { text: "three".into(), occurrence: 0 }, "seven", &Options::default()).unwrap();
     let after = source::find(&doc, 0).unwrap();
-    assert_eq!(after.encoding, Encoding::Bitonal);
+    assert!(after.bitonal());
     assert!(after.raster.data.iter().all(|v| *v == 0 || *v == 255));
 }
 
@@ -395,10 +396,16 @@ fn hostile_images_are_refused_cleanly() {
         ("/Width 100 /Height 100 /ColorSpace /DeviceGray /BitsPerComponent 8", vec![200; 50], "truncated"),
         ("/Width 1000000 /Height 1000000 /ColorSpace /DeviceGray /BitsPerComponent 8", vec![0; 10], "too large"),
         ("/Width -5 /Height 10 /ColorSpace /DeviceGray /BitsPerComponent 8", vec![0; 10], "not a scan"),
-        ("/Width 10 /Height 10 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /DCTDecode", vec![0xff, 0xd8, 0xff], "JPEG"),
-        ("/Width 10 /Height 10 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /JBIG2Decode", vec![0; 4], "JBIG2"),
-        ("/Width 10 /Height 10 /ColorSpace /DeviceCMYK /BitsPerComponent 8", vec![0; 400], "colour space"),
+        ("/Width 10 /Height 10 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /DCTDecode", vec![0xff, 0xd8, 0xff], "can't be decoded"),
+        ("/Width 10 /Height 10 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /JBIG2Decode", vec![0; 4], "can't be decoded"),
+        ("/Width 10 /Height 10 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /Bogus", vec![0; 4], "Bogus"),
+        ("/Width 10 /Height 10 /ColorSpace /Lab /BitsPerComponent 8", vec![0; 300], "colour space"),
         ("/Width 10 /Height 10 /ColorSpace /DeviceGray /BitsPerComponent 3", vec![0; 400], "bits"),
+        (
+            "/Width 10 /Height 10 /ColorSpace [/Indexed /DeviceRGB 1 <000000ffffff>] /BitsPerComponent 8 /Filter /DCTDecode",
+            vec![0xff, 0xd8],
+            "Indexed",
+        ),
         ("/Width 10 /Height 10 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode", vec![1, 2, 3, 4], "truncated"),
         ("/Width 10 /Height 10 /ImageMask true", vec![0; 20], "stencil"),
         ("/Width 10 /Height 10 /ColorSpace [/ICCBased 99 0 R] /BitsPerComponent 8", vec![0; 100], "ICC"),
@@ -443,4 +450,51 @@ fn timing() {
         an.banks.iter().map(|b| b.samples.len()).sum::<usize>(),
         report.changed_pixels
     );
+}
+
+/// A mark the text layer left out (OCR dropped the dash) is neither erased nor left behind:
+/// it moves with the word after it.
+#[test]
+fn unlabelled_marks_survive_and_follow_their_word() {
+    let spec = Spec {
+        lines: vec!["Optical character recognition - Wikipedia, the free encyclopedia".into(), "printed on paper for testing purposes only".into()],
+        layer_lines: Some(vec![
+            "Optical character recognition Wikipedia, the free encyclopedia".into(),
+            "printed on paper for testing purposes only".into(),
+        ]),
+        page: (420.0, 160.0),
+        ..Spec::default()
+    };
+    let (f, mut doc) = fixture(&spec);
+    let before = source::find(&doc, 0).unwrap().raster;
+    let e = replace_text(&mut doc, 0, &Target::Find { text: "recognition".into(), occurrence: 0 }, "reading", &Options::default()).unwrap();
+    let after = source::find(&doc, 0).unwrap().raster;
+    assert_eq!(changed_outside(&before, &after, e.report.zone), 0);
+    let truth = f.with_line(0, "Optical character reading - Wikipedia, the free encyclopedia").unwrap();
+    dump3("dash", &before, &after, &truth.raster, e.report.zone);
+    let (mean_dx, max_dx, _) = placement_error(&after, &truth, 0);
+    assert!(mean_dx < 0.6 && max_dx < 2.0, "placement {mean_dx} {max_dx} (NaN: a mark was lost or added)");
+}
+
+/// An underline touching the descenders is not a letter: editing the line keeps it whole.
+#[test]
+fn underlines_are_kept_whole() {
+    let spec = Spec {
+        lines: vec!["Quarterly report for the gypsum supply".into(), "Prepared by the planning group".into()],
+        underline: vec![0],
+        ..Spec::default()
+    };
+    let (f, mut doc) = fixture(&spec);
+    let before = source::find(&doc, 0).unwrap().raster;
+    let an = analyze(&doc, 0).unwrap();
+    assert_eq!(an.lines[0].text, "Quarterly report for the gypsum supply");
+    let e = replace_text(&mut doc, 0, &Target::Find { text: "report".into(), occurrence: 0 }, "repute", &Options::default()).unwrap();
+    let after = source::find(&doc, 0).unwrap().raster;
+    // The underline row stays dark along the whole edited zone.
+    let k = f.scale();
+    let row = ((f.spec.margin.1 + 0.16 * f.spec.font_size - 0.035 * f.spec.font_size) * k).round() as usize;
+    let dark = |r: &Raster| (e.report.zone.x0..e.report.zone.x1).filter(|&x| r.luma(x, row) < 128.0).count();
+    dump3("underline", &before, &after, &before, e.report.zone);
+    assert!(dark(&after) + 2 >= dark(&before), "underline pixels {} → {}", dark(&before), dark(&after));
+    assert_eq!(changed_outside(&before, &after, e.report.zone), 0);
 }

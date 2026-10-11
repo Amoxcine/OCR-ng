@@ -63,6 +63,35 @@ pub fn binarize(raster: &Raster, region: Rect, window: usize) -> Mask {
     mask
 }
 
+/// Rules and underlines in `mask`: horizontal runs of ink at least `min_len` long, with the
+/// pixels just above and below a run that belong to the same stroke (a rule a few pixels thick).
+pub fn rules(mask: &Mask, min_len: usize) -> Mask {
+    let (w, h) = (mask.width, mask.height);
+    let mut out = Mask::new(w, h);
+    if min_len == 0 {
+        return out;
+    }
+    for y in 0..h {
+        let mut x = 0;
+        while x < w {
+            if !mask.get(x, y) {
+                x += 1;
+                continue;
+            }
+            let start = x;
+            while x < w && mask.get(x, y) {
+                x += 1;
+            }
+            if x - start >= min_len {
+                for xx in start..x {
+                    out.set(xx, y, true);
+                }
+            }
+        }
+    }
+    out
+}
+
 /// A connected group of ink pixels, in image coordinates.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Component {
@@ -217,7 +246,9 @@ const MAX_DP: usize = 4096;
 
 /// Align `expected` widths (one per character) with `widths` of the columns (in order) and the
 /// spans of column runs (`span(a, b)`: from the left of column a to the right of column b - 1).
-pub fn align(expected: &[f64], col_count: usize, span: impl Fn(usize, usize) -> f64) -> Option<Vec<Piece>> {
+/// `split(a, b)` is the extra cost of reading columns `a..b` as one broken letter (wide gaps
+/// inside make that unlikely: a broken letter's pieces nearly touch).
+pub fn align(expected: &[f64], col_count: usize, span: impl Fn(usize, usize) -> f64, split: impl Fn(usize, usize) -> f64) -> Option<Vec<Piece>> {
     let (n, m) = (expected.len(), col_count);
     if n > MAX_DP || m > MAX_DP {
         return None;
@@ -252,7 +283,13 @@ pub fn align(expected: &[f64], col_count: usize, span: impl Fn(usize, usize) -> 
             if i < n && j < m {
                 relax(i + 1, j + 1, cost_ratio(span(j, j + 1), e(i, i + 1)), &mut best, &mut from);
                 for k in 2..=3 {
-                    relax(i + 1, j + k, cost_ratio(span(j, j + k), e(i, i + 1)) + COST_SPLIT * (k - 1) as f64, &mut best, &mut from);
+                    relax(
+                        i + 1,
+                        j + k,
+                        cost_ratio(span(j, j + k), e(i, i + 1)) + COST_SPLIT * (k - 1) as f64 + split(j, j + k),
+                        &mut best,
+                        &mut from,
+                    );
                     relax(i + k, j + 1, cost_ratio(span(j, j + 1), e(i, i + k)) + COST_SPLIT * (k - 1) as f64, &mut best, &mut from);
                 }
             }
@@ -355,7 +392,7 @@ mod tests {
         let widths = [10.0, 20.0, 4.0, 4.0];
         let lefts = [0.0, 14.0, 38.0, 44.0];
         let span = |a: usize, b: usize| if b > 4 { 1000.0 } else { lefts[b - 1] + widths[b - 1] - lefts[a] };
-        let pieces = align(&[10.0; 4], 4, span).unwrap();
+        let pieces = align(&[10.0; 4], 4, span, |_, _| 0.0).unwrap();
         assert_eq!(
             pieces,
             vec![Piece::Match { chars: 0..1, cols: 0..1 }, Piece::Match { chars: 1..3, cols: 1..2 }, Piece::Match { chars: 3..4, cols: 2..4 }]

@@ -45,6 +45,12 @@ pub struct Report {
     pub warnings: Vec<String>,
     /// Every word of the new line and its ink span `[x0, x1]` along the baseline (pixels).
     pub words: Vec<(String, [f64; 2])>,
+    /// What writing the scan back costs: bytes of the rewritten parts before and after.
+    pub bytes_before: usize,
+    pub bytes_after: usize,
+    /// Parts that were stored with loss (JPEG, JPEG 2000) or as fax/JBIG2 and are rewritten
+    /// without loss, by codec name.
+    pub reencoded: Vec<String>,
 }
 
 /// A unit of the new line: an old word (kept or moved) or a new one.
@@ -75,6 +81,13 @@ fn compose_word(word: &str, bank: &Bank, track: f64) -> Composed {
     }
     let width = prev.map_or(0.0, |(c, x)| x + bank.right(c));
     Composed { letters, width }
+}
+
+/// The scale a sample from a line of x-height `from` needs on a line of x-height `to`: 1 within
+/// 3 % (letters vary that much anyway), bounded otherwise.
+fn scale_for(to: f64, from: f64) -> f64 {
+    let k = to / from.max(1e-6);
+    if (k - 1.0).abs() <= 0.03 || !k.is_finite() { 1.0 } else { k.clamp(0.5, 2.0) }
 }
 
 /// Distance of `v` to the nearest whole number.
@@ -301,7 +314,12 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
         let mut letters = Vec::new();
         for &(ch, centre) in &c.letters {
             let at = ux + centre;
-            let misfit = |s: &Sample| off_grid(at - s.cx).hypot(off_grid(line.baseline_at(at) + s.top));
+            // Phase off the pixel grid, and size: a sample from a line of another size is scaled.
+            let misfit = |s: &Sample| {
+                let k = scale_for(line.x_height, s.x_height);
+                let phase = if k == 1.0 { off_grid(at - s.cx).hypot(off_grid(line.baseline_at(at) + s.top)) } else { 0.5 };
+                phase + 6.0 * (line.x_height / s.x_height.max(1e-6)).ln().abs()
+            };
             let s = bank.choose(ch, li, &mut used, &mut rng, misfit).ok_or_else(|| ScanError::MissingGlyphs(ch.to_string()))?;
             letters.push((s, centre));
         }
@@ -329,9 +347,10 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
                 (w.text.clone(), [w.bbox.x0 as f64 + dx, w.bbox.x1 as f64 + dx])
             }),
             (Unit::New(i), Some(c)) => {
-                let ink = |(s, centre): &(&Sample, f64)| ux + centre - s.cx - s.left;
+                let k = |s: &Sample| scale_for(line.x_height, s.x_height);
+                let ink = |(s, centre): &(&Sample, f64)| ux + centre - (s.cx + s.left) * k(s);
                 let x0 = c.iter().map(ink).fold(f64::MAX, f64::min);
-                let x1 = c.iter().map(|l| ink(l) + l.0.ink_width).fold(f64::MIN, f64::max);
+                let x1 = c.iter().map(|l| ink(l) + l.0.ink_width * k(l.0)).fold(f64::MIN, f64::max);
                 new_words.get(*i).map(|w| (w.to_string(), [x0, x1]))
             }
             _ => None,
@@ -356,6 +375,52 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
     let (ww, wh) = (work.width(), work.height());
     let m = matte(raster, work, line.ink, line.x_height);
 
+    // Other lines' ink is protected: never erased, never drawn over. A component shared by two
+    // lines (a descender touching an ascender) is split by distance to each line's band.
+    let ours: std::collections::HashSet<(u32, u32)> = line.pixels.iter().copied().collect();
+    let band_distance = |l: &crate::analysis::Line, x: f64, y: f64| {
+        let b = l.baseline_at(x);
+        let (top, bottom) = (b - l.cap_height, b + 0.4 * l.x_height);
+        if y < top {
+            top - y
+        } else if y > bottom {
+            y - bottom
+        } else {
+            0.0
+        }
+    };
+    let mut protected = Mask::new(ww, wh);
+    let mut shared_px: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
+    for (oi, other) in an.lines.iter().enumerate() {
+        if oi == li || other.bbox.intersect(&work).is_empty() {
+            continue;
+        }
+        for &(px, py) in &other.pixels {
+            let (ux, uy) = (px as usize, py as usize);
+            if !work.contains(ux, uy) {
+                continue;
+            }
+            let theirs = !ours.contains(&(px, py)) || {
+                let (fx, fy) = (ux as f64 + 0.5, uy as f64 + 0.5);
+                band_distance(other, fx, fy) < band_distance(line, fx, fy)
+            };
+            if theirs {
+                protected.set(ux - work.x0, uy - work.y0, true);
+                shared_px.insert((px, py));
+            }
+        }
+    }
+
+    // Rules and underlines crossing the line are protected too.
+    {
+        let window = ((line.x_height * 2.4) as usize).clamp(15, 301) | 1;
+        let lh = (line.cap_height + 0.4 * line.x_height).max(1.0);
+        let rules = segment::rules(&segment::binarize(raster, work, window), (1.5 * lh) as usize).dilate(1);
+        for (p, r) in protected.data.iter_mut().zip(&rules.data) {
+            *p |= *r;
+        }
+    }
+
     // Erase: the ink of removed and moving words.
     let mut sources: Vec<(usize, Mask)> = Vec::new();
     let mut erase = Mask::new(ww, wh);
@@ -365,15 +430,53 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
         let mut own = Mask::new(ww, wh);
         for &(px, py) in &line.pixels {
             let (px, py) = (px as usize, py as usize);
-            if px >= lo && px < hi && work.contains(px, py) {
+            if px >= lo && px < hi && work.contains(px, py) && !protected.get(px - work.x0, py - work.y0) {
                 own.set(px - work.x0, py - work.y0, true);
             }
         }
-        let own = own.dilate(r);
+        let mut own = own.dilate(r);
+        for (o, p) in own.data.iter_mut().zip(&protected.data) {
+            *o &= !*p;
+        }
         for (e, o) in erase.data.iter_mut().zip(&own.data) {
             *e |= *o;
         }
         sources.push((i, own));
+    }
+    // Ink between words that no letter claimed (a dash or bullet the text layer left out) keeps
+    // its place relative to the word after it.
+    let shift_of = |i: usize| moving.iter().find(|m| m.0 == i).map_or((0, 0), |m| (m.1, m.2));
+    let survives = |i: usize| i < p || i >= no - s;
+    let mut gap_moves: Vec<(Mask, i64, i64)> = Vec::new();
+    for k in 0..no.saturating_sub(1) {
+        let (Some(a), Some(b)) = (line.words.get(k), line.words.get(k + 1)) else { continue };
+        let (lo, hi) = (a.bbox.x1 + r, b.bbox.x0.saturating_sub(r));
+        if lo >= hi {
+            continue;
+        }
+        let follower = (k + 1..no).find(|&j| survives(j)).or_else(|| (0..=k).rev().find(|&j| survives(j)));
+        let (dx, dy) = follower.map_or((0, 0), shift_of);
+        if dx == 0 && dy == 0 {
+            continue;
+        }
+        let mut own = Mask::new(ww, wh);
+        for &(px, py) in &line.pixels {
+            let (px, py) = (px as usize, py as usize);
+            if px >= lo && px < hi && work.contains(px, py) && !protected.get(px - work.x0, py - work.y0) {
+                own.set(px - work.x0, py - work.y0, true);
+            }
+        }
+        if own.count() == 0 {
+            continue;
+        }
+        let mut own = own.dilate(r);
+        for (o, pr) in own.data.iter_mut().zip(&protected.data) {
+            *o &= !*pr;
+        }
+        for (e, o) in erase.data.iter_mut().zip(&own.data) {
+            *e |= *o;
+        }
+        gap_moves.push((own, dx, dy));
     }
     let window = ((line.x_height * 2.4) as usize).clamp(15, 301) | 1;
     let other = segment::binarize(raster, work, window).dilate(r);
@@ -389,10 +492,15 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
             }
         }
     }
-    let mut background = planes.clone();
+    // Grey scans: one channel is filled and its grain added, then shared.
+    let grey = raster.channels == 1;
+    let mut background: Vec<Plane> = if grey { planes.iter().take(1).cloned().collect() } else { planes.clone() };
     inpaint::fill(&mut background, &known);
     let mut rng = Rng::new(seed ^ 0x5eed);
     inpaint::add_grain(&mut background, &known, &erase, &mut rng);
+    if grey && let Some(g) = background.first().cloned() {
+        background = vec![g.clone(), g.clone(), g];
+    }
     let mut out = planes.clone();
     for y in 0..wh {
         for x in 0..ww {
@@ -407,9 +515,13 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
         report.warnings.push("the paper behind this line is textured; check the erased area".into());
     }
 
-    // Moved words: their own ink, recomposed over the new background.
-    for &(i, dx, dy) in &moving {
-        let Some((_, own)) = sources.iter().find(|(j, _)| *j == i) else { continue };
+    // Moved words (and the marks between them): their own ink, recomposed over the new paper.
+    let movers: Vec<(&Mask, i64, i64)> = moving
+        .iter()
+        .filter_map(|&(i, dx, dy)| sources.iter().find(|(j, _)| *j == i).map(|(_, own)| (own, dx, dy)))
+        .chain(gap_moves.iter().map(|(own, dx, dy)| (own, *dx, *dy)))
+        .collect();
+    for &(own, dx, dy) in &movers {
         for y in 0..wh {
             for x in 0..ww {
                 if !own.get(x, y) {
@@ -425,7 +537,9 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
                 }
                 let (tx, ty) = (tx as usize, ty as usize);
                 for (o, c) in out.iter_mut().zip(&m.ink) {
-                    o.set(tx, ty, c.get(x, y) + (1.0 - a) * o.get(tx, ty));
+                    if !protected.get(tx, ty) {
+                        o.set(tx, ty, c.get(x, y) + (1.0 - a) * o.get(tx, ty));
+                    }
                 }
             }
         }
@@ -436,25 +550,28 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
     for ((u, ux), c) in placed.iter().zip(&drawn) {
         let (Unit::New(_), Some(c)) = (u, c) else { continue };
         for (s, centre) in c {
-            // Within a fifth of a pixel of the grid, snap: no resampling, no softening.
-            let snap = |v: f64| if off_grid(v) < 2.0 { v.round() } else { v };
+            let k = scale_for(line.x_height, s.x_height);
+            // At scale 1, snap to the pixel grid: no resampling, no softening.
+            let snap = |v: f64| if k == 1.0 { v.round() } else { v };
             let at = ux + centre;
-            let box_left = snap(at - s.cx) - work.x0 as f64;
-            let box_top = snap(line.baseline_at(at) + s.top) - work.y0 as f64;
+            let box_left = snap(at - s.cx * k) - work.x0 as f64;
+            let box_top = snap(line.baseline_at(at) + s.top * k) - work.y0 as f64;
             let (x0, y0) = (box_left.floor().max(0.0) as usize, box_top.floor().max(0.0) as usize);
             let (x1, y1) = (
-                ((box_left + s.alpha.width as f64).ceil().max(0.0) as usize + 1).min(ww),
-                ((box_top + s.alpha.height as f64).ceil().max(0.0) as usize + 1).min(wh),
+                ((box_left + s.alpha.width as f64 * k).ceil().max(0.0) as usize + 1).min(ww),
+                ((box_top + s.alpha.height as f64 * k).ceil().max(0.0) as usize + 1).min(wh),
             );
             for y in y0..y1 {
                 for x in x0..x1 {
-                    let (sx, sy) = (x as f64 + 0.5 - box_left, y as f64 + 0.5 - box_top);
+                    let (sx, sy) = ((x as f64 + 0.5 - box_left) / k, (y as f64 + 0.5 - box_top) / k);
                     let a = s.alpha.sample(sx, sy);
                     if a <= 0.004 {
                         continue;
                     }
                     for (o, ink) in out.iter_mut().zip(&s.ink) {
-                        o.set(x, y, ink.sample(sx, sy) + (1.0 - a) * o.get(x, y));
+                        if !protected.get(x, y) {
+                            o.set(x, y, ink.sample(sx, sy) + (1.0 - a) * o.get(x, y));
+                        }
                     }
                 }
             }
@@ -481,19 +598,13 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
     }
     report.warnings.dedup();
     report.zone = zone;
-    // The zone must stay on this line (decision D1).
-    let allowed = Rect::from_f64(
-        [
-            limits.left.min(first_ink) - 2.0 * r as f64 - 2.0,
-            line.bbox.y0 as f64 - line.cap_height - 2.0 * r as f64,
-            limits.right.max(last_ink) + 2.0 * r as f64 + 2.0,
-            line.bbox.y1 as f64 + line.cap_height + 2.0 * r as f64,
-        ],
-        raster.width,
-        raster.height,
-    );
-    if !zone.is_empty() && zone.union(&allowed) != allowed {
-        return Err(ScanError::Internal(format!("the edit reached outside its line ({zone:?} not within {allowed:?})")));
+    // The edit must not touch another line's ink (decision D1: only this line changes).
+    let touched = shared_px.iter().filter(|&&(x, y)| result.samples(x as usize, y as usize) != raster.samples(x as usize, y as usize)).count();
+    if touched > 0 {
+        return Err(ScanError::Collision(format!(
+            "the new letters would touch the line {} (about {touched} of its ink pixels); try a shorter or differently shaped word",
+            if zone.y0 < line.bbox.y0 { "above" } else { "below" }
+        )));
     }
     Ok((result, report))
 }

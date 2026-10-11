@@ -353,26 +353,30 @@ impl Document {
     }
 
     /// Edit scanned text: what the scan of `page` holds (lines, baselines, blocks, styles and
-    /// the letters each style can be composed from).
-    pub fn scan_analysis(&self, page: usize) -> Result<scanedit::Analysis, scanedit::ScanError> {
+    /// the letters each style can be composed from). Cached while the page is unchanged.
+    pub fn scan_analysis(&self, page: usize) -> Result<Arc<scanedit::Analysis>, scanedit::ScanError> {
         let e = self
             .editor
             .as_ref()
             .ok_or_else(|| scanedit::ScanError::Pdf(self.read_only_reason.clone().unwrap_or_else(|| "the document can't be edited".into())))?;
-        scanedit::analyze(&e.cos, page)
+        scan::analysis(&e.cos, page).map(|(_, a)| a)
     }
 
     /// Edit scanned text without changing the document: the analysis, the scan as it would be
-    /// and what the edit would do.
+    /// and what the edit would do (applying the same edit next reuses this work).
     pub fn scan_preview(
         &self,
         page: usize,
         target: &scanedit::Target,
         text: &str,
-    ) -> Result<(scanedit::Analysis, scanedit::Raster, scanedit::Report), scanedit::ScanError> {
-        let an = self.scan_analysis(page)?;
-        let (raster, report) = scanedit::preview(&an, target, text, &scanedit::Options::default())?;
-        Ok((an, raster, report))
+    ) -> Result<(Arc<scanedit::Analysis>, scanedit::Raster, scanedit::Report), scanedit::ScanError> {
+        let e = self
+            .editor
+            .as_ref()
+            .ok_or_else(|| scanedit::ScanError::Pdf(self.read_only_reason.clone().unwrap_or_else(|| "the document can't be edited".into())))?;
+        let (key, an) = scan::analysis(&e.cos, page)?;
+        let p = scan::prepared(key, &an, target, text)?;
+        Ok((an, p.raster.clone(), p.report.clone()))
     }
 
     /// Add alternate text: the figures, in document order.
@@ -1716,7 +1720,7 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
             pdfcraft_edit::replace_line(doc, *page, *line, text)?;
         }
         Edit::ScanReplaceText { page, target, text } => {
-            scanedit::replace_text(doc, *page, target, text, &scanedit::Options::default())?;
+            scan::apply(doc, *page, target, text)?;
         }
         Edit::SetFieldScript { name, event, script } => {
             pdfcraft_forms::set_field_script(doc, name, event, script.as_deref())?;

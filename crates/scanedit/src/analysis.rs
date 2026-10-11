@@ -171,6 +171,9 @@ struct Label {
     text: String,
     rect: [f64; 4],
     sources: Vec<usize>,
+    /// The text layer's pieces of the line and their horizontal extents (pixels): one per word
+    /// when the layer was written word by word (OCR), which places each word's ink.
+    pieces: Vec<(String, f64, f64)>,
 }
 
 /// The text layer's lines over the scan, grouped into visual lines.
@@ -186,7 +189,8 @@ fn labels(doc: &Document, scan: &ScanImage) -> Result<Vec<Label>, ScanError> {
         if r[2] <= 0.0 || r[3] <= 0.0 || r[0] >= w || r[1] >= h || r[2] - r[0] < 1.0 || r[3] - r[1] < 1.0 {
             continue;
         }
-        out.push(Label { text: l.text.split_whitespace().collect::<Vec<_>>().join(" "), rect: r, sources: vec![i] });
+        let text = l.text.split_whitespace().collect::<Vec<_>>().join(" ");
+        out.push(Label { pieces: vec![(text.clone(), r[0], r[2])], text, rect: r, sources: vec![i] });
     }
     // Pieces of one visual line (an OCR layer writes word by word) join left to right. Word
     // boxes differ in height (ascenders, descenders), so pieces join on vertical overlap: most
@@ -213,6 +217,7 @@ fn labels(doc: &Document, scan: &ScanImage) -> Result<Vec<Label>, ScanError> {
                 m.text.push_str(&l.text);
                 m.rect = [m.rect[0].min(l.rect[0]), m.rect[1].min(l.rect[1]), m.rect[2].max(l.rect[2]), m.rect[3].max(l.rect[3])];
                 m.sources.extend(l.sources);
+                m.pieces.extend(l.pieces);
             }
             None => merged.push(l),
         }
@@ -239,7 +244,12 @@ fn build_line(raster: &Raster, label: &Label) -> Option<Line> {
         return None;
     }
     let window = ((lh * 1.2) as usize).clamp(15, 301) | 1;
-    let mask = segment::binarize(raster, region, window);
+    let mut mask = segment::binarize(raster, region, window);
+    // Underlines and rules touching descenders would make one giant "letter": take them out.
+    let rules = segment::rules(&mask, (1.5 * lh) as usize);
+    for (m, r) in mask.data.iter_mut().zip(&rules.data) {
+        *m &= !*r;
+    }
     let comps = segment::components(&mask, region);
     let min_area = ((0.05 * lh).powi(2)).max(3.0) as usize;
     let (top, bottom) = (label.rect[1] - 0.15 * lh, label.rect[3] + 0.15 * lh);
@@ -273,35 +283,53 @@ fn build_line(raster: &Raster, label: &Label) -> Option<Line> {
     let total_adv: f64 = chars.iter().map(|c| char_width(*c)).sum();
     let k = total_ink / total_adv.max(1e-6);
     let expected: Vec<f64> = chars.iter().map(|c| char_width(*c) * k).collect();
-    let span = |a: usize, b: usize| match (boxes.get(a), boxes.get(b.saturating_sub(1))) {
-        (Some(l), Some(r)) => (r.x1 as f64 - l.x0 as f64).max(1.0),
-        _ => 1.0,
-    };
-    let pieces = segment::align(&expected, boxes.len(), span)?;
+    // Which columns belong to which word, so that alignment errors stay inside one word.
+    let word_texts: Vec<&str> = label.text.split_whitespace().collect();
+    let groups = word_columns(&word_texts, &boxes, &label.pieces, &expected).unwrap_or_else(|| vec![(0..chars.len(), 0..boxes.len())]);
     let mut glyphs: Vec<Glyph> = chars.iter().map(|&ch| Glyph { ch, bbox: Rect::default(), confidence: 0.0, pixels: Vec::new() }).collect();
     let col_pixels = |r: Range<usize>| -> Vec<(u32, u32)> {
         r.filter_map(|ci| cols.get(ci)).flat_map(|c| c.iter().filter_map(|&i| mine.get(i)).flat_map(|comp| comp.pixels.iter().copied())).collect()
     };
-    for p in &pieces {
-        let Piece::Match { chars: cr, cols: kr } = p else { continue };
-        let px = col_pixels(kr.clone());
-        let bbox = kr.clone().filter_map(|i| boxes.get(i)).fold(Rect::default(), |r, b| r.union(b));
-        let ratio = (bbox.width() as f64).max(1.0) / expected.get(cr.clone()).map_or(1.0, |e| e.iter().sum::<f64>()).max(1.0);
-        let (n_chars, n_cols) = (cr.len(), kr.len());
-        if n_chars == 1 {
-            if let Some(g) = glyphs.get_mut(cr.start) {
-                g.confidence = if n_cols == 1 { (1.0 - ratio.ln().abs().min(0.6)) as f32 } else { 0.5 };
-                g.bbox = bbox;
-                g.pixels = px;
-            }
-        } else {
-            let parts = segment::cut(&px, bbox, expected.get(cr.clone()).unwrap_or(&[]));
-            for (ci, part) in cr.clone().zip(parts) {
-                if let Some(g) = glyphs.get_mut(ci) {
-                    g.bbox =
-                        part.iter().fold(Rect::default(), |r, &(x, y)| r.union(&Rect::new(x as usize, y as usize, x as usize + 1, y as usize + 1)));
-                    g.pixels = part;
-                    g.confidence = 0.3;
+    for (char_range, col_range) in groups {
+        let (c0, k0) = (char_range.start, col_range.start);
+        let exp = expected.get(char_range.clone()).unwrap_or(&[]);
+        let span = |a: usize, b: usize| match (boxes.get(k0 + a), boxes.get((k0 + b).saturating_sub(1))) {
+            (Some(l), Some(r)) => (r.x1 as f64 - l.x0 as f64).max(1.0),
+            _ => 1.0,
+        };
+        // Pieces of a broken letter nearly touch; a wide gap inside means two marks.
+        let split = |a: usize, b: usize| {
+            let widest =
+                (k0 + a..k0 + b.saturating_sub(1)).filter_map(|i| Some(boxes.get(i + 1)?.x0 as f64 - boxes.get(i)?.x1 as f64)).fold(0.0, f64::max);
+            3.0 * ((widest - 0.08 * lh).max(0.0) / (0.2 * lh).max(1.0))
+        };
+        let Some(pieces) = segment::align(exp, col_range.len(), span, split) else { continue };
+        // A word whose alignment had to skip ink or letters is less trustworthy as a whole.
+        let irregular = pieces.iter().any(|p| !matches!(p, Piece::Match { .. }));
+        for p in &pieces {
+            let Piece::Match { chars: cr, cols: kr } = p else { continue };
+            let (cr, kr) = (c0 + cr.start..c0 + cr.end, k0 + kr.start..k0 + kr.end);
+            let px = col_pixels(kr.clone());
+            let bbox = kr.clone().filter_map(|i| boxes.get(i)).fold(Rect::default(), |r, b| r.union(b));
+            let ratio = (bbox.width() as f64).max(1.0) / expected.get(cr.clone()).map_or(1.0, |e| e.iter().sum::<f64>()).max(1.0);
+            let (n_chars, n_cols) = (cr.len(), kr.len());
+            let cap = if irregular { 0.4 } else { 1.0 };
+            if n_chars == 1 {
+                if let Some(g) = glyphs.get_mut(cr.start) {
+                    g.confidence = (if n_cols == 1 { (1.0 - ratio.ln().abs().min(0.6)) as f32 } else { 0.5 }).min(cap);
+                    g.bbox = bbox;
+                    g.pixels = px;
+                }
+            } else {
+                let parts = segment::cut(&px, bbox, expected.get(cr.clone()).unwrap_or(&[]));
+                for (ci, part) in cr.clone().zip(parts) {
+                    if let Some(g) = glyphs.get_mut(ci) {
+                        g.bbox = part
+                            .iter()
+                            .fold(Rect::default(), |r, &(x, y)| r.union(&Rect::new(x as usize, y as usize, x as usize + 1, y as usize + 1)));
+                        g.pixels = part;
+                        g.confidence = 0.3f32.min(cap);
+                    }
                 }
             }
         }
@@ -366,6 +394,194 @@ fn build_line(raster: &Raster, label: &Label) -> Option<Line> {
         region,
         pixels: mine.iter().flat_map(|c| c.pixels.iter().copied()).collect(),
     })
+}
+
+/// Split a line's columns (`boxes`, left to right) between its words: by the text layer's word
+/// pieces when there is one piece per word, else at the widest gaps. `None` when the gaps don't
+/// separate the words clearly (letter-spaced or monospaced text): the line is aligned whole.
+fn word_columns(words: &[&str], boxes: &[Rect], pieces: &[(String, f64, f64)], expected: &[f64]) -> Option<Vec<(Range<usize>, Range<usize>)>> {
+    let n = words.len();
+    if n <= 1 || boxes.len() < n {
+        return None;
+    }
+    let mut char_start = Vec::with_capacity(n + 1);
+    let mut acc = 0;
+    for w in words {
+        char_start.push(acc);
+        acc += w.chars().count();
+    }
+    char_start.push(acc);
+    let centre = |b: &Rect| (b.x0 + b.x1) as f64 / 2.0;
+    // Boundaries: the first column of each word after the first.
+    let one_word_pieces = pieces.len() == n && pieces.iter().zip(words).all(|(p, w)| p.0 == *w);
+    let starts: Vec<usize> = if one_word_pieces {
+        // Each column goes to the piece whose span is nearest its centre.
+        let owner = |b: &Rect| {
+            let c = centre(b);
+            pieces
+                .iter()
+                .enumerate()
+                .min_by(|a, b| {
+                    let d = |p: &(String, f64, f64)| {
+                        if c < p.1 {
+                            p.1 - c
+                        } else if c > p.2 {
+                            c - p.2
+                        } else {
+                            0.0
+                        }
+                    };
+                    d(a.1).total_cmp(&d(b.1))
+                })
+                .map_or(0, |(i, _)| i)
+        };
+        let owners: Vec<usize> = boxes.iter().map(owner).collect();
+        if owners.windows(2).any(|w| w.get(1) < w.first()) {
+            return None;
+        }
+        (1..n).map(|wi| owners.iter().position(|&o| o >= wi).unwrap_or(boxes.len())).collect()
+    } else {
+        return word_groups_by_gaps(words, boxes, expected);
+    };
+    let mut col_start = vec![0];
+    col_start.extend(starts);
+    col_start.push(boxes.len());
+    let groups: Vec<(Range<usize>, Range<usize>)> = (0..n)
+        .map(|i| {
+            let c = char_start.get(i).copied().unwrap_or(0)..char_start.get(i + 1).copied().unwrap_or(0);
+            let k = col_start.get(i).copied().unwrap_or(0)..col_start.get(i + 1).copied().unwrap_or(0);
+            (c, k)
+        })
+        .collect();
+    // Every word needs some ink.
+    groups.iter().all(|(_, k)| !k.is_empty()).then_some(groups)
+}
+
+/// Words from gaps: the gaps between columns split in two classes (within words, between
+/// words; Otsu's threshold), giving runs of columns; runs are matched to words by their widths,
+/// so a mark the text left out (a dash) becomes a run that belongs to no word, and a word the
+/// threshold cut in two takes both runs. `None` when the gaps don't form two clear classes.
+fn word_groups_by_gaps(words: &[&str], boxes: &[Rect], expected: &[f64]) -> Option<Vec<(Range<usize>, Range<usize>)>> {
+    let n = words.len();
+    let gaps: Vec<f64> = boxes.windows(2).filter_map(|w| Some(w.get(1)?.x0 as f64 - w.first()?.x1 as f64)).collect();
+    if gaps.len() + 1 < n || n < 2 {
+        return None;
+    }
+    // Otsu on the gaps.
+    let mut sorted = gaps.clone();
+    sorted.sort_by(|a, b| a.total_cmp(b));
+    let total: f64 = sorted.iter().sum();
+    let (mut best_t, mut best_v, mut acc) = (f64::NAN, -1.0, 0.0);
+    for i in 1..sorted.len() {
+        acc += sorted.get(i - 1).copied().unwrap_or(0.0);
+        let (n0, n1) = (i as f64, (sorted.len() - i) as f64);
+        let (m0, m1) = (acc / n0, (total - acc) / n1);
+        let v = n0 * n1 * (m1 - m0).powi(2);
+        if v > best_v {
+            best_v = v;
+            best_t = (sorted.get(i - 1).copied().unwrap_or(0.0) + sorted.get(i).copied().unwrap_or(0.0)) / 2.0;
+        }
+    }
+    let low: Vec<f64> = gaps.iter().copied().filter(|g| *g < best_t).collect();
+    let high: Vec<f64> = gaps.iter().copied().filter(|g| *g >= best_t).collect();
+    if low.is_empty() || high.len() + 1 < n {
+        return None;
+    }
+    let low_mean = low.iter().sum::<f64>() / low.len() as f64;
+    let high_mean = high.iter().sum::<f64>() / high.len() as f64;
+    if high_mean < 1.8 * low_mean.max(1.0) {
+        return None;
+    }
+    // Runs of columns between word-sized gaps.
+    let mut runs: Vec<Range<usize>> = Vec::new();
+    let mut start = 0;
+    for (i, g) in gaps.iter().enumerate() {
+        if *g >= best_t {
+            runs.push(start..i + 1);
+            start = i + 1;
+        }
+    }
+    runs.push(start..boxes.len());
+    let span = |r: &Range<usize>| match (boxes.get(r.start), boxes.get(r.end.saturating_sub(1))) {
+        (Some(a), Some(b)) => (b.x1 as f64 - a.x0 as f64).max(1.0),
+        _ => 1.0,
+    };
+    // Expected word widths: their letters plus the letter gaps between them.
+    let mut word_w = Vec::with_capacity(n);
+    let mut c = 0;
+    for w in words {
+        let k = w.chars().count();
+        let e: f64 = expected.get(c..c + k).map_or(0.0, |e| e.iter().sum());
+        word_w.push(e + low_mean.max(0.0) * k.saturating_sub(1) as f64);
+        c += k;
+    }
+    let mean_word = word_w.iter().sum::<f64>() / n as f64;
+    // DP: word i takes runs j..j+k (k = 1..3), or a run is a stray mark, or a word has no ink.
+    let r = runs.len();
+    let idx = |i: usize, j: usize| i * (r + 1) + j;
+    let mut cost = vec![f64::INFINITY; (n + 1) * (r + 1)];
+    let mut from = vec![(0usize, 0usize); (n + 1) * (r + 1)];
+    if let Some(c0) = cost.get_mut(0) {
+        *c0 = 0.0;
+    }
+    for i in 0..=n {
+        for j in 0..=r {
+            let here = cost.get(idx(i, j)).copied().unwrap_or(f64::INFINITY);
+            if !here.is_finite() {
+                continue;
+            }
+            let mut go = |ni: usize, nj: usize, c: f64| {
+                if ni <= n
+                    && nj <= r
+                    && let Some(slot) = cost.get_mut(idx(ni, nj))
+                    && here + c < *slot
+                {
+                    *slot = here + c;
+                    if let Some(f) = from.get_mut(idx(ni, nj)) {
+                        *f = (i, j);
+                    }
+                }
+            };
+            if i < n {
+                for k in 1..=3 {
+                    if j + k <= r {
+                        let w = span(&(runs.get(j).map_or(0, |a| a.start)..runs.get(j + k - 1).map_or(0, |b| b.end)));
+                        let e = word_w.get(i).copied().unwrap_or(1.0).max(1.0);
+                        go(i + 1, j + k, (w / e).ln().abs() + 0.6 * (k - 1) as f64);
+                    }
+                }
+                go(i + 1, j, 3.0);
+            }
+            if j < r {
+                // A stray mark: cheap when it is small next to a word.
+                let w = runs.get(j).map_or(1.0, span);
+                go(i, j + 1, 0.4 + 2.0 * (w / mean_word.max(1.0)));
+            }
+        }
+    }
+    let mut assign: Vec<Option<Range<usize>>> = vec![None; n];
+    let (mut i, mut j) = (n, r);
+    for _ in 0..(n + r + 1) {
+        if i == 0 && j == 0 {
+            break;
+        }
+        let (pi, pj) = from.get(idx(i, j)).copied()?;
+        if pi + 1 == i
+            && pj < j
+            && let Some(slot) = assign.get_mut(pi)
+        {
+            *slot = Some(runs.get(pj).map_or(0, |a| a.start)..runs.get(j - 1).map_or(0, |b| b.end));
+        }
+        (i, j) = (pi, pj);
+    }
+    let mut out = Vec::with_capacity(n);
+    let mut c = 0;
+    for (w, cols) in words.iter().zip(assign) {
+        let k = w.chars().count();
+        out.push((c..c + k, cols?));
+        c += k;
+    }
+    Some(out)
 }
 
 /// Theil–Sen line fit: the median of pairwise slopes, then the median intercept.
@@ -566,7 +782,9 @@ pub(crate) fn matte(raster: &Raster, region: Rect, ink: [f32; 3], x_height: f64)
     let (w, h) = (region.width(), region.height());
     let window = ((x_height * 2.4) as usize).clamp(15, 301) | 1;
     let inkmask = segment::binarize(raster, region, window).dilate(halo(x_height));
-    let mut planes: Vec<Plane> = (0..3).map(|_| Plane::new(w, h, 0.0)).collect();
+    // Grey scans are filled once and the result shared by the three channels.
+    let channels = if raster.channels == 1 { 1 } else { 3 };
+    let mut planes: Vec<Plane> = (0..channels).map(|_| Plane::new(w, h, 0.0)).collect();
     for y in 0..h {
         for x in 0..w {
             let c = raster.rgb(region.x0 + x, region.y0 + y);
@@ -582,7 +800,13 @@ pub(crate) fn matte(raster: &Raster, region: Rect, ink: [f32; 3], x_height: f64)
         }
     }
     let mut background = planes.clone();
-    inpaint::fill(&mut background, &known);
+    inpaint::fill_with(&mut background, &known, 8);
+    if channels == 1 {
+        let g = background.first().cloned().unwrap_or_else(|| Plane::new(w, h, 255.0));
+        background = vec![g.clone(), g.clone(), g];
+        let g = planes.first().cloned().unwrap_or_else(|| Plane::new(w, h, 255.0));
+        planes = vec![g.clone(), g.clone(), g];
+    }
     let mut alpha = Plane::new(w, h, 0.0);
     for y in 0..h {
         for x in 0..w {
@@ -618,15 +842,24 @@ pub(crate) fn matte(raster: &Raster, region: Rect, ink: [f32; 3], x_height: f64)
 
 /// Analyse page `page` (0-based) of `doc`: its scan and the text its text layer labels.
 pub fn analyze(doc: &Document, page: usize) -> Result<Analysis, ScanError> {
+    let timing = std::env::var_os("SCANEDIT_TIMING").is_some();
+    let t = std::time::Instant::now();
     let scan = source::find(doc, page)?;
+    if timing {
+        eprintln!("scanedit: decode {:?}", t.elapsed());
+    }
     let labels = labels(doc, &scan)?;
+    if timing {
+        eprintln!("scanedit: labels {:?}", t.elapsed());
+    }
     if labels.is_empty() {
         return Err(ScanError::NoText);
     }
     let mut lines = Vec::new();
     let mut unmatched = Vec::new();
-    for l in labels.iter().take(MAX_LINES) {
-        match build_line(&scan.raster, l) {
+    let labels: Vec<&Label> = labels.iter().take(MAX_LINES).collect();
+    for (l, built) in labels.iter().zip(crate::raster::par_map(&labels, |_, l| build_line(&scan.raster, l))) {
+        match built {
             Some(line) => lines.push(line),
             None => unmatched.push(l.text.clone()),
         }
@@ -634,9 +867,16 @@ pub fn analyze(doc: &Document, page: usize) -> Result<Analysis, ScanError> {
     if lines.is_empty() {
         return Err(ScanError::NoText);
     }
+    if timing {
+        eprintln!("scanedit: lines {:?}", t.elapsed());
+    }
     let blocks = blocks(&mut lines);
     let styles = styles(&mut lines);
-    let banks = styles.iter().enumerate().map(|(si, _)| Bank::build(&scan.raster, &lines, si)).collect();
+    let samples = crate::raster::par_map(&lines, |li, line| crate::bank::line_samples(&scan.raster, line, li));
+    let banks = styles.iter().enumerate().map(|(si, _)| Bank::build(&lines, si, &samples)).collect();
+    if timing {
+        eprintln!("scanedit: banks {:?}", t.elapsed());
+    }
     Ok(Analysis { scan, lines, blocks, styles, banks, unmatched })
 }
 

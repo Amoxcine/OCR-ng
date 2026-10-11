@@ -23,6 +23,8 @@ pub struct Sample {
     pub ink_width: f64,
     /// The ink's α-weighted horizontal centre, from the box's left edge.
     pub cx: f64,
+    /// The x-height of the line it comes from (samples are scaled to the target line's).
+    pub x_height: f64,
     pub line: usize,
     pub glyph: usize,
     pub confidence: f32,
@@ -71,16 +73,20 @@ pub struct Bank {
     /// A word space, pen to pen.
     pub space: f64,
     pub x_height: f64,
+    /// Samples set aside because their shape doesn't match their label.
+    pub suspect_count: usize,
 }
 
 /// Samples less sure than this are only used when nothing better exists.
 const GOOD: f32 = 0.5;
+/// Samples less sure than this (shapes that contradict their label) are never drawn.
+const USABLE: f32 = 0.2;
 /// Ridge weight of the width-based prior in the spacing fit (in observations).
 const PRIOR: f64 = 0.25;
 
 impl Bank {
     /// The bank of style `style` from the lines of that style.
-    pub(crate) fn build(raster: &Raster, lines: &[Line], style: usize) -> Bank {
+    pub(crate) fn build(lines: &[Line], style: usize, line_samples: &[Vec<(usize, Sample)>]) -> Bank {
         let mut bank = Bank::default();
         let mut gaps = Vec::new();
         let mut xh = Vec::new();
@@ -89,25 +95,37 @@ impl Bank {
         let mut cross: Vec<(char, char, f64, usize)> = Vec::new();
         for (li, line) in lines.iter().enumerate().filter(|(_, l)| l.style == style) {
             xh.push(line.x_height);
-            let m = matte(raster, line.region, line.ink, line.x_height);
-            let r = halo(line.x_height);
-            for (gi, g) in line.glyphs.iter().enumerate() {
-                if g.pixels.is_empty() || g.confidence <= 0.0 {
-                    continue;
-                }
-                if let Some(s) = sample_of(line, li, gi, &m, r) {
-                    bank.centres.insert((li, gi), g.bbox.x0 as f64 + s.left + s.cx);
-                    if g.confidence >= GOOD {
-                        width_stats.entry(g.ch).or_default().add(s.ink_width);
-                    }
-                    bank.by_char.entry(g.ch).or_default().push(bank.samples.len());
-                    bank.samples.push(s);
-                }
+            for (gi, s) in line_samples.get(li).map_or(&[][..], Vec::as_slice) {
+                let Some(g) = line.glyphs.get(*gi) else { continue };
+                bank.centres.insert((li, *gi), g.bbox.x0 as f64 + s.left + s.cx);
+                bank.by_char.entry(g.ch).or_default().push(bank.samples.len());
+                bank.samples.push(s.clone());
             }
+        }
+        // Samples whose shape doesn't fit their label (the text layer and the ink disagreed)
+        // are neither drawn nor used for spacing.
+        let t = std::time::Instant::now();
+        let suspects = bank.suspects();
+        if std::env::var_os("SCANEDIT_TIMING").is_some() {
+            eprintln!("scanedit: style {style}: {} samples, suspects {:?}", bank.samples.len(), t.elapsed());
+        }
+        for &i in &suspects {
+            if let Some(s) = bank.samples.get_mut(i) {
+                s.confidence = s.confidence.min(0.05);
+            }
+        }
+        let bad: std::collections::HashSet<(usize, usize)> =
+            suspects.iter().filter_map(|&i| bank.samples.get(i).map(|s| (s.line, s.glyph))).collect();
+        bank.suspect_count = bad.len();
+        let good = |li: usize, gi: usize, g: &crate::analysis::Glyph| g.confidence >= GOOD && !bad.contains(&(li, gi));
+        for s in bank.samples.iter().filter(|s| s.confidence >= GOOD) {
+            width_stats.entry(s.ch).or_default().add(s.ink_width);
+        }
+        for (li, line) in lines.iter().enumerate().filter(|(_, l)| l.style == style) {
             for w in &line.words {
                 for gi in w.glyphs.clone().skip(1) {
                     let (Some(a), Some(b)) = (line.glyphs.get(gi - 1), line.glyphs.get(gi)) else { continue };
-                    if a.confidence < GOOD || b.confidence < GOOD {
+                    if !good(li, gi - 1, a) || !good(li, gi, b) {
                         continue;
                     }
                     gaps.push(b.bbox.x0 as f64 - a.bbox.x1 as f64);
@@ -120,7 +138,7 @@ impl Bank {
                 let [w0, w1] = pair else { continue };
                 let (Some(ia), ib) = (w0.glyphs.end.checked_sub(1), w1.glyphs.start) else { continue };
                 let (Some(a), Some(b)) = (line.glyphs.get(ia), line.glyphs.get(ib)) else { continue };
-                if a.confidence < GOOD || b.confidence < GOOD {
+                if !good(li, ia, a) || !good(li, ib, b) {
                     continue;
                 }
                 if let (Some(ca), Some(cb)) = (bank.centres.get(&(li, ia)), bank.centres.get(&(li, ib))) {
@@ -145,6 +163,61 @@ impl Bank {
         }
         bank.space = if spaces.is_empty() { 0.53 * bank.x_height } else { median(&mut spaces) };
         bank
+    }
+
+    /// Samples whose shape contradicts their label: far from the other samples of their letter,
+    /// or closer to another, well-attested letter that looks different.
+    fn suspects(&self) -> Vec<usize> {
+        let desc: Vec<Vec<f32>> = self.samples.iter().map(|s| descriptor(s, self.x_height_or(s))).collect();
+        let dist = |a: usize, b: usize| -> f32 {
+            match (desc.get(a), desc.get(b)) {
+                (Some(x), Some(y)) => x.iter().zip(y).map(|(p, q)| (p - q).powi(2)).sum::<f32>().sqrt(),
+                _ => f32::MAX,
+            }
+        };
+        // Per letter with enough samples: its medoid and typical spread.
+        let mut medoids: Vec<(char, usize, f32)> = Vec::new();
+        for (&ch, idx) in &self.by_char {
+            let good: Vec<usize> = idx.iter().copied().filter(|&i| self.samples.get(i).is_some_and(|s| s.confidence >= GOOD)).collect();
+            if good.len() < 3 {
+                continue;
+            }
+            let Some(&m) = good.iter().min_by(|&&a, &&b| {
+                let sa: f32 = good.iter().map(|&o| dist(a, o)).sum();
+                let sb: f32 = good.iter().map(|&o| dist(b, o)).sum();
+                sa.total_cmp(&sb)
+            }) else {
+                continue;
+            };
+            let mut d: Vec<f64> = good.iter().map(|&o| f64::from(dist(m, o))).collect();
+            medoids.push((ch, m, median(&mut d) as f32));
+        }
+        let mut out = Vec::new();
+        for (i, s) in self.samples.iter().enumerate() {
+            let own = medoids.iter().find(|m| m.0 == s.ch);
+            let to_own = own.map(|m| dist(i, m.1));
+            if let (Some(m), Some(d)) = (own, to_own)
+                && d > (3.0 * m.2).max(0.35)
+            {
+                out.push(i);
+                continue;
+            }
+            // Closer to another letter's medoid than that letter's own spread, while that letter
+            // looks clearly different from this one's.
+            let mislabelled = medoids.iter().filter(|o| o.0 != s.ch).any(|o| {
+                let d = dist(i, o.1);
+                let differs = own.is_none_or(|m| dist(m.1, o.1) > 2.0 * (m.2.max(o.2)).max(0.15));
+                differs && d < o.2.max(0.08) * 1.5 && to_own.is_none_or(|t| d < 0.6 * t)
+            });
+            if mislabelled {
+                out.push(i);
+            }
+        }
+        out
+    }
+
+    fn x_height_or(&self, s: &Sample) -> f64 {
+        if s.x_height > 0.0 { s.x_height } else { self.x_height.max(1.0) }
     }
 
     fn prior_right(&self, c: char) -> f64 {
@@ -238,13 +311,19 @@ impl Bank {
         Some(self.pen_span(line, li, b)?[0] - self.pen_span(line, li, a)?[1])
     }
 
+    /// Whether `ch` has a usable sample (suspect ones don't count).
     pub fn has(&self, ch: char) -> bool {
-        self.by_char.get(&ch).is_some_and(|v| !v.is_empty())
+        self.by_char.get(&ch).is_some_and(|v| v.iter().any(|&i| self.samples.get(i).is_some_and(|s| s.confidence >= USABLE)))
     }
 
     /// Characters with samples and how many.
     pub fn coverage(&self) -> Vec<(char, usize)> {
-        let mut v: Vec<(char, usize)> = self.by_char.iter().map(|(c, s)| (*c, s.len())).collect();
+        let mut v: Vec<(char, usize)> = self
+            .by_char
+            .iter()
+            .map(|(c, s)| (*c, s.iter().filter(|&&i| self.samples.get(i).is_some_and(|x| x.confidence >= USABLE)).count()))
+            .filter(|(_, n)| *n > 0)
+            .collect();
         v.sort();
         v
     }
@@ -258,16 +337,59 @@ impl Bank {
         let best = cands
             .iter()
             .filter_map(|&i| Some((i, self.samples.get(i)?)))
+            .filter(|(_, s)| s.confidence >= USABLE)
             .map(|(i, s)| {
                 let quality = if s.confidence >= GOOD { 1.0 + f64::from(s.confidence) } else { f64::from(s.confidence) };
                 let reuse = used.iter().filter(|&&u| u == i).count() as f64 * 2.5;
-                let distance = (s.line as f64 - near_line as f64).abs().min(40.0) * 0.01;
+                // Same line first (same wear and size), then nearby lines.
+                let distance = if s.line == near_line { -0.4 } else { (s.line as f64 - near_line as f64).abs().min(40.0) * 0.01 };
                 (i, quality - reuse - distance - 2.0 * misfit(s) + rng.unit() * 0.3)
             })
             .max_by(|a, b| a.1.total_cmp(&b.1))?;
         used.push(best.0);
         self.samples.get(best.0)
     }
+}
+
+/// The samples of one line (by glyph index): its matte, then each glyph's ink.
+pub(crate) fn line_samples(raster: &Raster, line: &Line, li: usize) -> Vec<(usize, Sample)> {
+    let m = matte(raster, line.region, line.ink, line.x_height);
+    let r = halo(line.x_height);
+    line.glyphs
+        .iter()
+        .enumerate()
+        .filter(|(_, g)| !g.pixels.is_empty() && g.confidence > 0.0)
+        .filter_map(|(gi, _)| Some((gi, sample_of(line, li, gi, &m, r)?)))
+        .collect()
+}
+
+/// A sample's shape: its ink (α ≥ 0.25) box resampled to 12 × 12, plus its height and width in
+/// x-heights (so a period and an "o" differ even though both are blobs).
+fn descriptor(s: &Sample, x_height: f64) -> Vec<f32> {
+    let a = &s.alpha;
+    let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0usize, 0usize);
+    for y in 0..a.height {
+        for x in 0..a.width {
+            if a.get(x, y) >= 0.25 {
+                (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
+            }
+        }
+    }
+    if x0 >= x1 || y0 >= y1 {
+        return vec![0.0; 146];
+    }
+    let (w, h) = ((x1 - x0) as f64, (y1 - y0) as f64);
+    let mut d = Vec::with_capacity(146);
+    for j in 0..12 {
+        for i in 0..12 {
+            let sx = x0 as f64 + (i as f64 + 0.5) / 12.0 * w;
+            let sy = y0 as f64 + (j as f64 + 0.5) / 12.0 * h;
+            d.push(a.sample(sx, sy) / 12.0);
+        }
+    }
+    d.push((h / x_height) as f32 * 0.5);
+    d.push((w / x_height) as f32 * 0.5);
+    d
 }
 
 fn sample_of(line: &Line, li: usize, gi: usize, m: &Matte, halo: usize) -> Option<Sample> {
@@ -309,6 +431,7 @@ fn sample_of(line: &Line, li: usize, gi: usize, m: &Matte, halo: usize) -> Optio
     }
     Some(Sample {
         cx: sum / mass,
+        x_height: line.x_height,
         ch: g.ch,
         alpha: a,
         ink,
