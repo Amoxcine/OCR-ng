@@ -225,6 +225,26 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
     assert!(open.left() > 0.0 && open.right() <= discord.left(), "Open {open:?} stays in sight left of Discord {discord:?}");
 }
 
+/// macOS (#789): with the integrated title bar, the strip is the 28 pt band AppKit centres the
+/// traffic lights in, and everything in it fits that band and clears the lights.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_integrated_title_bar_is_the_traffic_light_band() {
+    let h = harness(|app| {
+        app.integrated_titlebar = true;
+        app.open_bytes("band.pdf", None, FIXTURE.to_vec()).unwrap();
+    });
+    let band = 28.0;
+    for label in ["Home", "band.pdf", "Open", "Discord", "Keyboard shortcuts"] {
+        let r = h.get_by_label(label).rect();
+        assert!(r.top() >= 0.0 && r.bottom() <= band, "{label}: {r:?} inside the {band} pt title bar");
+        assert!(r.height() >= 24.0, "{label}: {r:?} stays clickable");
+    }
+    // Content starts after the three lights (the last one ends 62 pt in) with a gap.
+    let home = h.get_by_label("Home").rect();
+    assert!(home.left() >= 62.0 + 4.0, "Home {home:?} clears the traffic lights");
+}
+
 #[test]
 fn narrow_tab_strips_accept_vertical_wheel_scrolling() {
     for width in [600.0, 900.0] {

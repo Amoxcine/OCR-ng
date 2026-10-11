@@ -112,7 +112,7 @@
 	Convert	Converti
 	E-Sign	Firma elettronica
 	Print ({key})	Stampa ({key})
-	Save (M4)	Salva (M4)
+	Save ({key})	Salva ({key})
 	Document properties ({key})	Proprietà documento ({key})
 	Find tools and commands	Trova strumenti e comandi
 	Fit to height	Adatta all'altezza
@@ -781,6 +781,7 @@
 	Rotation	Rotazione
 	Appear behind page	Dietro la pagina
 	Appear on top of page	Sopra la pagina
+	Offset from centre	Scostamento dal centro
 	From colour	Da colore
 	Page Range Options	Opzioni intervallo di pagine
 	Preview: page {p} of {n}	Anteprima: pagina {p} di {n}
@@ -1589,16 +1590,16 @@
 	Opened, but its security settings don't allow combining. Enter the permissions password.	Aperto, ma le sue impostazioni di sicurezza non consentono la combinazione. Inserisci la password delle autorizzazioni.
 	Unlocked: the combined file won't be password-protected	Sbloccato: il file combinato non sarà protetto da password
 	Unlocked {n} of {m} files	Sbloccati {n} file su {m}
-	Drop PDFs or folders here, or choose them.	Trascina qui PDF o cartelle, oppure sceglili.
+	Drop PDFs, images, text files or folders here, or choose them.	Trascina qui PDF, immagini, file di testo o cartelle, oppure sceglili.
 	Add folder…	Aggiungi cartella…
 	Add folder and subfolders…	Aggiungi cartella e sottocartelle…
 	More ways to add files	Altri modi per aggiungere file
-	Every PDF in the folder	Tutti i PDF nella cartella
-	Every PDF in the folder and the folders inside it	Tutti i PDF nella cartella e nelle sue sottocartelle
+	Every PDF, image and text file in the folder	Tutti i PDF, le immagini e i file di testo nella cartella
+	Every PDF, image and text file in the folder and the folders inside it	Tutti i PDF, le immagini e i file di testo nella cartella e nelle sue sottocartelle
 	Add folder	Aggiungi cartella
 	Add folder and subfolders	Aggiungi cartella e sottocartelle
-	No PDFs found in {folder}	Nessun PDF trovato in {folder}
-	Added the first {n} PDFs in {folder}	Aggiunti i primi {n} PDF di {folder}
+	No PDFs, images or text files found in {folder}	Nessun PDF, immagine o file di testo trovato in {folder}
+	Added the first {n} files in {folder}	Aggiunti i primi {n} file di {folder}
 	Click to sort, drag to move the column. Drag its edge to resize it.	Fai clic per ordinare, trascina per spostare la colonna. Trascinane il bordo per ridimensionarla.
 	Reset columns	Reimposta colonne
 	Remove {n} files	Rimuovi {n} file
@@ -1616,7 +1617,7 @@
 	{n} files need attention	{n} file richiedono attenzione
 	{name} can't be combined: {why}	Impossibile combinare {name}: {why}
 	Check the pages of {name}: {why}	Controlla le pagine di {name}: {why}
-	Add the PDFs to combine	Aggiungi i PDF da combinare
+	Add the files to combine	Aggiungi i file da combinare
 	File name	Nome file
 	Warnings	Avvisi
 	Drag to reorder	Trascina per riordinare
@@ -1629,6 +1630,10 @@
 	Password-protected	Protetto da password
 	Its security settings don't allow copying pages	Le sue impostazioni di sicurezza non consentono di copiare le pagine
 	Can't be read: {e}	Impossibile leggerlo: {e}
+	Leave out files that can't be read?	Escludere i file che non si possono leggere?
+	These files can't be read, so they won't be in the combined PDF:	Questi file non si possono leggere, quindi non saranno nel PDF combinato:
+	Combine the rest	Combina gli altri
+	and {n} more	e altri {n}
 	Includes unsaved changes	Include modifiche non salvate
 	Pages of {name} to combine, e.g. 1-3, 6	Pagine di {name} da combinare, es. 1-3, 6
 	Remove {name}	Rimuovi {name}
@@ -2233,3 +2238,6 @@ key	Space	Spazio
 	Type the corrected text; the preview shows the real result.	Digita il testo corretto; l'anteprima mostra il risultato reale.
 	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Usa lettere presenti altrove nella pagina; le lettere accentate si possono comporre se l'accento compare da qualche parte nella pagina.
 	rewritten without loss	riscritta senza perdita
+	Enhance camera image	Migliora foto della fotocamera
+	Drag the corners onto the document's edges, then choose Enhance page.	Trascina gli angoli sui bordi del documento, poi scegli Migliora la pagina.
+	Enhance page	Migliora la pagina

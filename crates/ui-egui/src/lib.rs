@@ -31,6 +31,7 @@ pub use combine_grid::ThumbState as CombineThumb;
 mod combine_ui;
 pub mod docking;
 pub use combine_ui::{Columns as CombineColumns, CombineView, Lock as CombineLock, SortKey};
+mod camera_ui;
 mod commands;
 mod comment_props;
 pub mod comments;
@@ -187,6 +188,8 @@ pub enum QuickTool {
     Measure(measure_ui::Tool),
     /// Crop pages by dragging a rectangle.
     Crop,
+    /// Scan & OCR ▸ Enhance ▸ Camera image: drag four corners, then Enhance page.
+    EnhanceCamera,
     /// A Fill & Sign tool.
     Fill(fill_sign::FillTool),
     /// A Prepare a form field tool.
@@ -369,6 +372,9 @@ pub struct PasswordPrompt {
     /// The bytes are a recovery snapshot: once the document is open it takes the snapshot's
     /// path and recovery entry. Cancelling the prompt drops the association with it (#813).
     recovered: Option<RecoveryMeta>,
+    /// The tool that asked for this file (a tool chosen with no document open): it runs once
+    /// the document is unlocked.
+    then: Option<&'static str>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -938,7 +944,7 @@ impl PdfCraftApp {
             Err(e @ (OpenError::NeedsPassword | OpenError::WrongPassword)) => {
                 let error = matches!(e, OpenError::WrongPassword).then(|| "Incorrect password. Try again.".to_string());
                 self.password_prompt =
-                    Some(PasswordPrompt { name: name.to_string(), path, bytes, input: String::new(), error, activate, recovered: None });
+                    Some(PasswordPrompt { name: name.to_string(), path, bytes, input: String::new(), error, activate, recovered: None, then: None });
                 return Ok(());
             }
             Err(e) => return Err(e.to_string()),
@@ -1134,11 +1140,16 @@ impl PdfCraftApp {
                 if let Some(meta) = &p.recovered {
                     self.finish_recovery(meta);
                 }
+                if let Some(command) = p.then {
+                    self.execute(command);
+                }
             }
-            // Wrong password: the new prompt is for the same bytes, so it keeps the snapshot.
+            // Wrong password: the new prompt is for the same bytes, so it keeps the snapshot
+            // and the tool waiting for it.
             Ok(()) => {
                 if let Some(prompt) = self.password_prompt.as_mut() {
                     prompt.recovered = p.recovered;
+                    prompt.then = p.then;
                 }
             }
         }
@@ -1168,14 +1179,16 @@ impl PdfCraftApp {
         }
     }
 
+    /// The File ▸ Open picker: PDFs, and images and text that become PDFs.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn open_picker() -> rfd::AsyncFileDialog {
+        rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"]).add_filter(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE)
+    }
+
     pub fn open_dialog(&mut self) {
         self.startup_superseded = true;
         #[cfg(not(target_arch = "wasm32"))]
-        self.pick(
-            pickers::PickFor::Open,
-            rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"]).add_filter(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE),
-            false,
-        );
+        self.pick(pickers::PickFor::Open, Self::open_picker(), false);
         // Browsers pick files asynchronously; the bytes arrive through `inbox`.
         #[cfg(target_arch = "wasm32")]
         {
@@ -1325,7 +1338,19 @@ impl PdfCraftApp {
 
     /// Run a catalogue command. Commands that aren't implemented yet say which milestone ships them.
     pub fn run_command(&mut self, command: &str) {
-        if pdfcraft_engine::commands::command(command).is_some() {
+        if let Some(spec) = pdfcraft_engine::commands::command(command) {
+            use pdfcraft_engine::commands::Needs;
+            // A tool that needs a document, chosen with none open, asks for the file and then
+            // runs on it, instead of only saying to open one first.
+            let needs_document = !matches!(spec.needs, Needs::Nothing | Needs::Undo | Needs::Redo);
+            let is_tool = pdfcraft_engine::catalog::TOOL_GROUPS
+                .iter()
+                .flat_map(|g| g.sections.iter().flat_map(|s| s.items.iter()))
+                .any(|i| i.command == spec.id);
+            if self.active.is_none() && needs_document && is_tool && !self.command_enabled(spec) {
+                self.open_then_run(spec);
+                return;
+            }
             self.execute(command);
             return;
         }
@@ -1341,6 +1366,32 @@ impl PdfCraftApp {
             })
             .unwrap_or_else(|| tl!("is not available yet").to_string());
         self.notify_fmt("`{command}` {when}", &[("command", command), ("when", &when)]);
+    }
+
+    /// Ask for a file to open, then run `spec` on it once it is open (or unlocked). Nothing runs
+    /// when the picker is cancelled or the file doesn't open.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn open_then_run(&mut self, spec: &'static pdfcraft_engine::commands::CommandSpec) {
+        self.startup_superseded = true;
+        let dialog = Self::open_picker().set_title(tl!(spec.label).trim_end_matches('…'));
+        let command = spec.id;
+        self.ask_one(pickers::Ask::File(dialog), None, move |app, path| {
+            let path = path.to_string_lossy().into_owned();
+            let before = app.views.len();
+            app.open_path(&path);
+            if let Some(prompt) = app.password_prompt.as_mut().filter(|p| p.path.as_deref() == Some(path.as_str())) {
+                // Encrypted: the tool runs once the password is in.
+                prompt.then = Some(command);
+            } else if app.views.len() > before && app.active.is_some() {
+                app.execute(command);
+            }
+        });
+    }
+
+    /// Browsers read the picked file asynchronously; it opens, and the tool can be chosen again.
+    #[cfg(target_arch = "wasm32")]
+    fn open_then_run(&mut self, _spec: &'static pdfcraft_engine::commands::CommandSpec) {
+        self.open_dialog();
     }
 
     /// Today in `fmt` (or Preferences ▸ Date format), with month and weekday names in the date
@@ -1740,6 +1791,7 @@ impl PdfCraftApp {
                     ),
                     "hand" => QuickTool::Hand,
                     "crop" => QuickTool::Crop,
+                    "enhance-camera" => QuickTool::EnhanceCamera,
                     "redact" => QuickTool::Redact,
                     "add-text" => QuickTool::AddText,
                     "edit-text" => QuickTool::EditText,

@@ -1369,6 +1369,32 @@ mod tests {
         }
     }
 
+    /// Report statuses and rule descriptions must retain their meaning in Taiwan Chinese.
+    #[test]
+    fn traditional_chinese_accessibility_meaning() {
+        use pdfcraft_engine::a11y::{Rule, Status};
+        let zh = Lang::from_code("zh-hant").expect("zh-hant registered");
+        assert_eq!(tr(zh, Status::Passed.label()), "通過");
+        assert_eq!(tr(zh, Status::Failed.label()), "未通過");
+        assert_eq!(tr(zh, Rule::Scripts.description()), "沒有妨礙無障礙操作的指令碼");
+        assert_eq!(tr(zh, Rule::TableRows.name()), "列");
+        assert_eq!(tr(zh, Rule::TableRows.explanation()), "表格列應直接位於表格或其表頭、主體、表尾內。請修正表格標記。");
+        assert_eq!(tr(zh, Rule::TableRegularity.description()), "表格每列的欄數必須相同，每欄的列數也必須相同");
+        assert_eq!(tr(zh, Rule::TableCells.explanation()), "表格儲存格應位於列內。請修正表格標記。");
+        assert_eq!(tr(zh, Rule::TableHeaders.explanation()), "表頭儲存格（TH）讓聽者知道每欄或每列的內容。請標記表頭儲存格。");
+    }
+
+    /// A choice in a form is an item, not a project; field notices preserve user-supplied names.
+    #[test]
+    fn traditional_chinese_form_vocabulary() {
+        let zh = Lang::from_code("zh-hant").expect("zh-hant registered");
+        assert_eq!(tr(zh, "Item:"), "項目：");
+        assert_eq!(tr(zh, "Item List"), "項目清單");
+        assert_eq!(tr(zh, "Sort items"), "排序項目");
+        assert_eq!(tr(zh, "Read Only"), "唯讀");
+        assert_eq!(fmt(tr(zh, "{name} is read-only"), &[("name", "Field{n}")]), "Field{n} 為唯讀");
+    }
+
     #[test]
     fn french_is_registered() {
         let fr = Lang::from_code("fr").expect("fr registered");

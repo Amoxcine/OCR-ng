@@ -735,7 +735,7 @@ fn combine_files_opens_in_its_own_tab() {
     h.state_mut().execute("page.combine");
     h.run_steps(3);
     assert!(h.state().combine_showing() && h.state().active.is_none());
-    h.get_by_label("Add the PDFs to combine");
+    h.get_by_label("Add the files to combine");
     // Back to the document, then to Combine through its tab.
     h.get_by_label("doc.pdf").click();
     h.run_steps(3);
@@ -991,31 +991,91 @@ fn columns_resize_and_the_layout_is_kept_in_the_settings() {
 }
 
 #[test]
-fn a_folder_adds_its_pdfs_in_order_and_optionally_its_subfolders() {
+fn a_folder_adds_its_pdfs_images_and_text_in_order_and_optionally_its_subfolders() {
     let dir = std::env::temp_dir().join(format!("pdfcraft-combine-folder-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("sub")).unwrap();
     for (name, pages) in [("page10.pdf", 1), ("page2.PDF", 2), ("sub/inner.pdf", 3)] {
         std::fs::write(dir.join(name), fixture(pages)).unwrap();
     }
-    std::fs::write(dir.join("notes.txt"), b"not a pdf").unwrap();
+    // #569: images and text files join too; other files are left out.
+    std::fs::write(dir.join("notes.txt"), b"Some notes").unwrap();
+    std::fs::write(dir.join("readme.md"), b"# not combinable").unwrap();
     let mut h = harness(1, |_| {});
     h.state_mut().execute("page.combine");
     h.run_steps(2);
     h.state_mut().pick_override = Some(vec![dir.to_string_lossy().into_owned()]);
     h.get_by_label("Add folder…").click();
     h.run_steps(4);
-    assert_eq!(combine_names(&h), ["page2.PDF", "page10.pdf"], "PDFs only, numbers by value");
+    assert_eq!(combine_names(&h), ["notes.txt", "page2.PDF", "page10.pdf"], "numbers by value");
     // The toolbar's menu: the folder and its subfolders, as one undo step.
     h.get_by_label("More ways to add files").click();
     h.run_steps(2);
     h.get_by_label("Add folder and subfolders…").click();
     h.run_steps(4);
-    assert_eq!(combine_names(&h), ["page2.PDF", "page10.pdf", "page2.PDF", "page10.pdf", "inner.pdf"]);
+    assert_eq!(combine_names(&h), ["notes.txt", "page2.PDF", "page10.pdf", "notes.txt", "page2.PDF", "page10.pdf", "inner.pdf"]);
     h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
     h.run_steps(2);
-    assert_eq!(combine_names(&h).len(), 2);
+    assert_eq!(combine_names(&h).len(), 3);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// #569: an image or a text file added to Combine files becomes a PDF as it joins the list, an
+/// ordinary row with its pages.
+#[test]
+fn images_and_text_files_join_the_combine_list_as_pdfs() {
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::RgbImage::from_pixel(40, 20, image::Rgb([90, 120, 200])).write_to(&mut png, image::ImageFormat::Png).unwrap();
+    let mut h = combine_of(&[("one.pdf", 2)]);
+    h.state_mut()
+        .use_files(pdfcraft_ui_egui::FilePurpose::Combine, vec![("scan.png".into(), png.into_inner()), ("notes.txt".into(), b"Some notes".to_vec())]);
+    h.run_steps(3);
+    assert_eq!(combine_names(&h), ["one.pdf", "scan.png", "notes.txt"]);
+    let draft = &h.state().combine_draft;
+    assert!(draft.iter().all(|f| f.bytes.starts_with(b"%PDF-") && f.problem.is_none()), "made into PDFs");
+    assert_eq!(draft.iter().map(|f| f.pages).collect::<Vec<_>>(), [2, 1, 1]);
+    h.get_by_label("Combine").click();
+    h.run_steps(3);
+    assert_eq!(texts_of(h.state(), 1), ["Page 1", "Page 2", "", "Some notes"]);
+}
+
+/// A file that can't be read (a damaged image, a type that can't be made into a PDF) joins the
+/// list all the same, with why; Combine asks before leaving it out, and Cancel changes nothing.
+#[test]
+fn files_that_cannot_be_read_are_listed_and_left_out_once_the_user_agrees() {
+    let mut h = combine_of(&[("one.pdf", 2)]);
+    let bad = vec![("broken.jpg".to_string(), b"\xff\xd8\xff\xe0 not a JPEG".to_vec()), ("report.docx".to_string(), b"PK\x03\x04".to_vec())];
+    h.state_mut().use_files(pdfcraft_ui_egui::FilePurpose::Combine, bad);
+    h.run_steps(3);
+    assert_eq!(combine_names(&h), ["one.pdf", "broken.jpg", "report.docx"]);
+    for f in &h.state().combine_draft[1..] {
+        let why = f.problem.as_deref().expect("why it can't be combined");
+        assert!(why.starts_with("Can't be read: ") && !why.contains(&f.name), "{why}");
+        assert!(f.lock.is_none() && f.pages == 0);
+    }
+    h.get_by_label_contains("this file type can't be converted");
+    // One readable file is not enough to combine.
+    assert!(h.get_by_label("Combine").accesskit_node().is_disabled());
+    h.state_mut().use_files(pdfcraft_ui_egui::FilePurpose::Combine, vec![("two.pdf".into(), fixture(1))]);
+    h.run_steps(3);
+    assert!(!h.get_by_label("Combine").accesskit_node().is_disabled());
+    // Combine asks first, naming the files left out; Cancel leaves everything as it was.
+    h.get_by_label("Combine").click();
+    h.run_steps(3);
+    h.get_by_label("Leave out files that can't be read?");
+    h.get_by_label("• broken.jpg");
+    h.get_by_label("• report.docx");
+    h.get_by_label("Cancel").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("Leave out files that can't be read?").is_none());
+    assert_eq!(h.state().views.len(), 1, "nothing combined");
+    assert_eq!(combine_names(&h).len(), 4);
+    // Asked again: Combine the rest.
+    h.get_by_label("Combine").click();
+    h.run_steps(3);
+    h.get_by_label("Combine the rest").click();
+    h.run_steps(3);
+    assert_eq!(texts_of(h.state(), 1), ["Page 1", "Page 2", "Page 1"]);
 }
 
 fn type_password(h: &mut Harness<'static, PdfCraftApp>, password: &str) {

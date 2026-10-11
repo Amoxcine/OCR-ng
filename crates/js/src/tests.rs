@@ -544,6 +544,37 @@ mod xfa_model {
         let o = go("xfa.host.messageBox(new Array(100000).join('x'));", "form1[0].page1[0]", "click");
         assert!(matches!(&o.effects[0], XfaEffect::MessageBox(m) if m.chars().count() <= 4_097));
     }
+
+    #[test]
+    fn a_slow_engine_start_does_not_count_against_the_script() {
+        let ms = std::time::Duration::from_millis;
+        // On a busy machine the engine can take longer to start than a script may run: the
+        // script still runs (abandoning it would turn the form's scripts off).
+        let o = run_within_limits("test", ms(10_000), ms(500), move |started| {
+            std::thread::sleep(ms(1_500));
+            started();
+            XfaOutcome { result: Some("ran".into()), ..Default::default() }
+        });
+        assert!(!o.abandoned, "{o:?}");
+        assert_eq!(o.result.as_deref(), Some("ran"));
+        // The script's own time counts from then.
+        let o = run_within_limits("test", ms(10_000), ms(200), move |started| {
+            started();
+            std::thread::sleep(ms(2_000));
+            XfaOutcome::default()
+        });
+        assert!(o.abandoned && o.error.as_deref().is_some_and(|e| e.contains("ran longer")), "{o:?}");
+        // Start-up has a limit of its own, so nobody waits forever for an engine.
+        let o = run_within_limits("test", ms(200), ms(10_000), move |started| {
+            std::thread::sleep(ms(2_000));
+            started();
+            XfaOutcome::default()
+        });
+        assert!(o.abandoned && o.error.as_deref().is_some_and(|e| e.contains("to start")), "{o:?}");
+        // A script that finishes without saying it started (refused at once) isn't abandoned.
+        let o = run_within_limits("test", ms(10_000), ms(200), |_| XfaOutcome { error: Some("refused".into()), ..Default::default() });
+        assert!(!o.abandoned && o.error.as_deref() == Some("refused"), "{o:?}");
+    }
 }
 
 mod formcalc {

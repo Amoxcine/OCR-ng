@@ -151,6 +151,26 @@ fn watermarks_rotate_fade_and_can_go_behind() {
 }
 
 #[test]
+fn watermark_offset_moves_the_centre_right_and_up() {
+    let mut doc = fixture();
+    let wm = Watermark { text: "DRAFT".into(), rotation: 0.0, offset: [-100.0, 50.0], ..Watermark::default() };
+    add_watermark(&mut doc, &[0], &wm, false).unwrap();
+    let s = streams(&doc, 0);
+    let mark = s.iter().find(|c| c.contains("/PCMark /Watermark")).expect("the watermark stream");
+    assert!(mark.contains("1 0 0 1 200 450 cm"), "{mark}");
+}
+
+#[test]
+fn a_watermark_offset_that_is_not_finite_is_refused() {
+    for offset in [[f64::NAN, 0.0], [0.0, f64::INFINITY], [f64::NEG_INFINITY, 0.0]] {
+        let mut doc = fixture();
+        let wm = Watermark { text: "DRAFT".into(), offset, ..Watermark::default() };
+        assert!(matches!(add_watermark(&mut doc, &[0], &wm, false), Err(EditError::Invalid(_))), "{offset:?}");
+        assert!(!doc.is_modified());
+    }
+}
+
+#[test]
 fn invalid_requests_change_nothing() {
     let mut doc = fixture();
     assert!(matches!(add_header_footer(&mut doc, &[0], &HeaderFooter::default(), false, &cx()), Err(EditError::Invalid(_))));
@@ -1003,7 +1023,10 @@ fn page_content_bytes(doc: &Document, page: usize) -> Vec<u8> {
 
 /// A page drawing image XObject /Im0 at 100,100 size 200 × 100 (pixels 4 × 2).
 fn image_page() -> Document {
-    let content = "q 200 0 0 100 100 100 cm /Im0 Do Q BT /F1 12 Tf 72 700 Td (Caption) Tj ET";
+    image_page_with("q 200 0 0 100 100 100 cm /Im0 Do Q BT /F1 12 Tf 72 700 Td (Caption) Tj ET")
+}
+
+fn image_page_with(content: &str) -> Document {
     let objs: Vec<String> = vec![
         "<< /Type /Catalog /Pages 2 0 R >>".into(),
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
@@ -1025,6 +1048,49 @@ fn image_page() -> Document {
     }
     out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{x}\n%%EOF\n", objs.len() + 1).as_bytes());
     Document::open(Arc::new(out)).unwrap()
+}
+
+/// The box of the first `re` on the page in user space, after the `cm`s before it.
+fn first_rect_in_user_space(doc: &Document) -> [f64; 4] {
+    let mut ctm = pdfcraft_content::Matrix::IDENTITY;
+    for op in pdfcraft_content::parse(&page_content_bytes(doc, 0)).ops {
+        if op.is("cm") {
+            ctm = pdfcraft_content::Matrix(op.nums::<6>().unwrap()).then(&ctm);
+        } else if op.is("re") {
+            let [x, y, w, h] = op.nums::<4>().unwrap();
+            return ctm.bbox([x, y, x + w, y + h]);
+        }
+    }
+    panic!("no clip rectangle");
+}
+
+#[test]
+fn moving_an_image_moves_its_own_clip_too() {
+    let content = "q 100 100 200 100 re W* n 200 0 0 100 100 100 cm /Im0 Do Q BT /F1 12 Tf 72 700 Td (Caption) Tj ET";
+    let target = [50.0, 400.0, 350.0, 600.0];
+    let mut doc = image_page_with(content);
+    let before = images::page_images(&doc, 0).unwrap()[0].rect;
+    images::change_image(&mut doc, 0, 0, &images::ImageChange::Transform(images::rect_to_rect(before, target))).unwrap();
+    let mut doc = reopen(&doc);
+    assert!(close(images::page_images(&doc, 0).unwrap()[0].rect, target));
+    assert!(close(first_rect_in_user_space(&doc), target), "{:?}", first_rect_in_user_space(&doc));
+    // A second edit still finds the clip, now behind the `cm` the first one put before it.
+    let moved = [80.0, 420.0, 380.0, 620.0];
+    images::change_image(&mut doc, 0, 0, &images::ImageChange::Transform(images::rect_to_rect(target, moved))).unwrap();
+    assert!(close(first_rect_in_user_space(&doc), moved));
+    images::translate_images(&mut doc, 0, &[0], [10.0, 0.0]).unwrap();
+    assert!(close(images::page_images(&doc, 0).unwrap()[0].rect, [90.0, 420.0, 390.0, 620.0]));
+    assert!(close(first_rect_in_user_space(&doc), [90.0, 420.0, 390.0, 620.0]));
+    // Moving it with the group move helper takes the clip along as well.
+    let mut doc = image_page_with(content);
+    images::translate_images(&mut doc, 0, &[0], [30.0, -20.0]).unwrap();
+    assert!(close(images::page_images(&doc, 0).unwrap()[0].rect, [130.0, 80.0, 330.0, 180.0]));
+    assert!(close(first_rect_in_user_space(&doc), [130.0, 80.0, 330.0, 180.0]));
+    // A clip shared with other drawing is left where it is.
+    let shared = "q 100 100 200 100 re W n q 200 0 0 100 100 100 cm /Im0 Do Q 0 0 10 10 re f Q";
+    let mut doc = image_page_with(shared);
+    images::change_image(&mut doc, 0, 0, &images::ImageChange::Transform(images::rect_to_rect(before, target))).unwrap();
+    assert!(close(first_rect_in_user_space(&doc), [100.0, 100.0, 300.0, 200.0]));
 }
 
 fn close(a: [f64; 4], b: [f64; 4]) -> bool {

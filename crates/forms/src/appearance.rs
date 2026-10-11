@@ -5,17 +5,19 @@
 //! marked-content block as viewers expect. Supported: single-line, multiline (wrapped), comb,
 //! password, quadding, auto font size (`0 Tf`), combo boxes and list boxes (selection shown).
 //!
-//! The `/DA` font is used when the form's `/DR` defines it as a simple font (text encoded in
-//! WinAnsi) or as a composite font with a predefined Unicode CMap such as `UniJIS-UTF16-H`, as
-//! Japanese forms use (text encoded in that CMap). Otherwise (other composite fonts, missing
-//! resources) Helvetica is used, so text is always visible. Widths use the approximate metrics
-//! of `pdfcraft-fonts` (Helvetica, or one em per full-width character in composite fonts).
+//! The `/DA` font is used when the form's `/DR` defines it as a simple font that can encode the
+//! displayed text (using its own encoding and Differences), or as a composite font with a
+//! predefined Unicode CMap such as `UniJIS-UTF16-H`, as Japanese forms use. Otherwise (unsupported
+//! characters, other composite fonts, missing resources) Helvetica is used. Widths use the
+//! approximate metrics of `pdfcraft-fonts` (Helvetica, or one em per full-width character in
+//! composite fonts).
 //!
 //! `/MK /R` (0, 90, 180, 270, counterclockwise) lays the content out in the upright box and sets
 //! the appearance `/Matrix` so that box lands on the widget rectangle. Any other value is 0, and
 //! rotation 0 leaves `/Matrix` off.
 
 use pdfcraft_cos::{Dict, Document, Object, Stream};
+use pdfcraft_fonts::pdf::Metrics;
 use pdfcraft_fonts::{UnicodeCMap, cjk_width, helvetica_width, literal, win_ansi, wrap_with};
 
 use crate::{Field, FieldKind, Widget, acroform, flags};
@@ -111,24 +113,35 @@ pub fn parse_da(da: &str) -> Da {
 }
 
 /// How a field font's text is encoded and measured.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum FontText {
     WinAnsi,
+    /// A reused simple font's encoding, including indirect dictionaries and Differences.
+    Simple(Box<Metrics>),
     /// A composite font with a predefined Unicode CMap.
     Unicode(UnicodeCMap),
 }
 
 impl FontText {
-    fn encode(self, s: &str) -> Vec<u8> {
+    fn encode(&self, s: &str) -> Vec<u8> {
         match self {
             Self::WinAnsi => win_ansi(s),
+            // Selection checks every displayed string first; wrapping only removes line breaks.
+            Self::Simple(metrics) => metrics.encode(&s.replace('\t', " ")).unwrap_or_default(),
             Self::Unicode(cmap) => cmap.encode(s),
         }
     }
 
-    fn width(self, s: &str, size: f64) -> f64 {
+    fn can_encode(&self, s: &str) -> bool {
         match self {
-            Self::WinAnsi => helvetica_width(s, size),
+            Self::Simple(metrics) => metrics.encode(&s.replace('\t', " ")).is_some(),
+            _ => true,
+        }
+    }
+
+    fn width(&self, s: &str, size: f64) -> f64 {
+        match self {
+            Self::WinAnsi | Self::Simple(_) => helvetica_width(s, size),
             Self::Unicode(_) => cjk_width(s, size),
         }
     }
@@ -154,7 +167,7 @@ fn dr_font(doc: &Document, name: &str) -> Option<(Object, FontText)> {
     if matches!(fd.name(b"BaseFont"), Some(b"ZapfDingbats" | b"Symbol")) {
         return None;
     }
-    Some((entry, FontText::WinAnsi))
+    Some((entry, FontText::Simple(Box::new(Metrics::from_dict(doc, fd)))))
 }
 
 fn helvetica() -> Object {
@@ -281,7 +294,22 @@ pub fn field_appearance_as(doc: &Document, f: &Field, w: &Widget, values: &[Stri
     let place = placement(mk_rotation(doc, &wd), page_w, page_h);
     let (width, height) = (place.layout_w, place.layout_h);
     let da = parse_da(wd.get(b"DA").and_then(|o| doc.resolve(o).as_string().map(|s| s.to_text())).as_deref().unwrap_or(&f.da));
-    let (font_name, font_obj, enc) = match dr_font(doc, &da.font) {
+    let text: String = if f.kind == FieldKind::Combo {
+        values.iter().map(|v| f.options.iter().find(|(e, _)| e == v).map_or(v.clone(), |(_, d)| d.clone())).collect::<Vec<_>>().join(", ")
+    } else {
+        values.first().cloned().unwrap_or_default()
+    };
+    let text = if f.has(flags::PASSWORD) { "*".repeat(text.chars().count()) } else { text };
+    let can_show = |enc: &FontText| {
+        if f.kind == FieldKind::List {
+            f.options.iter().all(|(_, display)| enc.can_encode(display))
+        } else if f.kind == FieldKind::Text && f.has(flags::MULTILINE) {
+            text.split(['\n', '\r']).all(|line| enc.can_encode(line))
+        } else {
+            enc.can_encode(&text)
+        }
+    };
+    let (font_name, font_obj, enc) = match dr_font(doc, &da.font).filter(|(_, enc)| can_show(enc)) {
         Some((o, enc)) => (da.font.clone(), o, enc),
         None => ("Helv".to_string(), helvetica(), FontText::WinAnsi),
     };
@@ -326,12 +354,6 @@ pub fn field_appearance_as(doc: &Document, f: &Field, w: &Widget, values: &[Stri
             }
         }
         _ => {
-            let text: String = if f.kind == FieldKind::Combo {
-                values.iter().map(|v| f.options.iter().find(|(e, _)| e == v).map_or(v.clone(), |(_, d)| d.clone())).collect::<Vec<_>>().join(", ")
-            } else {
-                values.first().cloned().unwrap_or_default()
-            };
-            let text = if f.has(flags::PASSWORD) { "*".repeat(text.chars().count()) } else { text };
             let comb = f.has(flags::COMB) && !f.has(flags::MULTILINE) && !f.has(flags::PASSWORD) && f.max_len.is_some_and(|m| m > 0);
             if f.kind == FieldKind::Text && f.has(flags::MULTILINE) {
                 if size == 0.0 {

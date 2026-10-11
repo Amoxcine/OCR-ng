@@ -1109,3 +1109,367 @@ fn data_paths_leave_areas_out() {
     assert_eq!(path("other[0].box[0].rest[0]"), "other[0].box[0].rest[0]");
     assert_eq!(data_path(&tpl, ""), Vec::new());
 }
+
+/// A form of one page area (7.5in × 10in of content from 0.5in) around `body`.
+fn one_area_form(root_attrs: &str, body: &str) -> String {
+    format!(
+        r##"<?xml version="1.0" encoding="UTF-8"?>
+<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/">
+<template xmlns="http://www.xfa.org/schema/xfa-template/3.3/">
+<subform name="form" {root_attrs}>
+ <pageSet><pageArea name="page"><contentArea x="0.5in" y="0.5in" w="7.5in" h="10in"/><medium short="8.5in" long="11in"/></pageArea></pageSet>
+{body}
+</subform>
+</template>
+</xdp:xdp>
+"##
+    )
+}
+
+/// Every field is inside the content area of its page, and the fields come in template order.
+fn assert_paginated(form: &Form, fields: usize, min_pages: usize) {
+    assert!(form.pages.len() >= min_pages, "{} pages", form.pages.len());
+    let mut names = Vec::new();
+    for (i, p) in form.pages.iter().enumerate() {
+        for w in widgets(p) {
+            assert!(
+                w.rect.y >= 36.0 - 0.01 && w.rect.bottom() <= 36.0 + 720.0 + 0.01,
+                "page {}: {} is outside the content area: {:?}",
+                i + 1,
+                w.name,
+                w.rect
+            );
+            names.push(w.som.clone());
+        }
+    }
+    assert_eq!(names.len(), fields, "{names:?}");
+    let expected: Vec<String> = (0..fields).map(|i| format!("f{i}[0]")).collect();
+    for (n, e) in names.iter().zip(&expected) {
+        assert!(n.ends_with(e), "{n} where {e} belongs: {names:?}");
+    }
+}
+
+#[test]
+fn a_positioned_subform_taller_than_a_page_continues_on_the_next_pages() {
+    // 30 fields 0.9in apart: 27in of positioned content, where a content area holds 10in.
+    let fields: String =
+        (0..30).map(|i| format!(r#"<field name="f{i}" x="0.5in" y="{}in" w="4in" h="0.4in"><ui><textEdit/></ui></field>"#, i as f64 * 0.9)).collect();
+    // As the only child of a flowed root …
+    let form = layout_xml(&one_area_form(
+        r#"layout="tb""#,
+        &format!(r#"<subform name="body"><border><fill><color value="200,200,200"/></fill></border>{fields}</subform>"#),
+    ))
+    .unwrap();
+    assert_paginated(&form, 30, 3);
+    // … its fill is cut at the breaks, a piece on every page, none past the content area.
+    for (i, p) in form.pages.iter().enumerate() {
+        let fills: Vec<&Rect> = p.items.iter().filter_map(|it| if let Item::Fill { rect, .. } = it { Some(rect) } else { None }).collect();
+        assert!(!fills.is_empty(), "page {}: no fill", i + 1);
+        for r in fills {
+            assert!(r.bottom() <= 36.0 + 720.0 + 0.01, "page {}: fill {r:?}", i + 1);
+        }
+    }
+    // … after other content on the page …
+    let form = layout_xml(&one_area_form(
+        r#"layout="tb""#,
+        &format!(r#"<draw name="head" w="4in" h="3in"><value><text>Head</text></value></draw><subform name="body">{fields}</subform>"#),
+    ))
+    .unwrap();
+    assert_paginated(&form, 30, 3);
+    assert!(!widgets(&form.pages[0]).is_empty(), "the block starts on the page the heading is on");
+    // … and as the root itself (positioned is the default layout).
+    let form = layout_xml(&one_area_form("", &fields)).unwrap();
+    assert_paginated(&form, 30, 3);
+}
+
+#[test]
+fn wrapped_and_fixed_height_blocks_taller_than_a_page_are_split_too() {
+    let fields: String = (0..60).map(|i| format!(r#"<field name="f{i}" w="3.5in" h="0.8in"><ui><textEdit/></ui></field>"#)).collect();
+    // Left-to-right wrapping: 30 lines of 0.8in.
+    let form = layout_xml(&one_area_form(r#"layout="tb""#, &format!(r#"<subform name="body" layout="lr-tb" w="7.5in">{fields}</subform>"#))).unwrap();
+    assert_paginated(&form, 60, 3);
+    // Top-to-bottom with a fixed height the content outgrows.
+    let form =
+        layout_xml(&one_area_form(r#"layout="tb""#, &format!(r#"<subform name="body" layout="tb" w="7.5in" h="9in">{fields}</subform>"#))).unwrap();
+    assert_paginated(&form, 60, 5);
+}
+
+#[test]
+fn a_block_that_fits_a_page_is_still_moved_whole() {
+    let block = |n: usize| {
+        format!(r#"<subform name="b{n}" w="7in" h="6in"><field name="f{n}" x="0in" y="5in" w="4in" h="0.4in"><ui><textEdit/></ui></field></subform>"#)
+    };
+    let form = layout_xml(&one_area_form(r#"layout="tb""#, &format!("{}{}{}", block(0), block(1), block(2)))).unwrap();
+    assert_eq!(form.pages.len(), 3);
+    for p in &form.pages {
+        let w = widgets(p);
+        assert_eq!(w.len(), 1);
+        assert!((w[0].rect.y - (36.0 + 360.0)).abs() < 0.01, "{:?}", w[0].rect);
+    }
+}
+
+#[test]
+fn a_field_taller_than_a_page_is_cut_through_without_looping() {
+    let body = r#"<field name="f0" w="4in" h="25in"><ui><textEdit/></ui></field><field name="f1" w="4in" h="0.4in"><ui><textEdit/></ui></field>"#;
+    let form = layout_xml(&one_area_form(r#"layout="tb""#, body)).unwrap();
+    let all: Vec<&Widget> = form.pages.iter().flat_map(widgets).collect();
+    assert_eq!(all.len(), 2);
+    assert!(form.pages.len() <= 4, "{} pages", form.pages.len());
+}
+
+/// A form built the way Designer builds a flowed one: everything in one left-to-right wrapped
+/// body, sections of a heading over repeating rows of fields, and a text field that grows.
+fn wrapped_form(data: &str) -> String {
+    let body = r#"<subform name="body" layout="lr-tb" w="7.5in">
+  <subform name="section" layout="lr-tb" w="7.5in" minH="0.5in">
+   <draw name="heading" w="7.5in" h="0.2in"><value><text>Entries</text></value></draw>
+   <subform name="row" layout="lr-tb" w="7.5in" minH="0.5in"><occur max="-1"/>
+    <field name="what" w="3.5in" h="1in"><ui><textEdit multiLine="1"/></ui></field>
+    <field name="when" w="0.5in" h="1in"><ui><textEdit/></ui></field>
+    <field name="why" w="3.5in" h="1in"><ui><textEdit multiLine="1"/></ui></field>
+   </subform>
+  </subform>
+  <field name="notes" w="7.5in" minH="1.5in"><ui><textEdit multiLine="1"/></ui></field>
+  <field name="after" w="7.5in" h="0.3in"><ui><textEdit/></ui></field>
+ </subform>"#;
+    let form = one_area_form(r#"layout="tb""#, body);
+    let packet =
+        format!("<xfa:datasets xmlns:xfa=\"http://www.xfa.org/schema/xfa-data/1.0/\"><xfa:data>{data}</xfa:data></xfa:datasets>\n</xdp:xdp>");
+    form.replace("</xdp:xdp>", &packet)
+}
+
+#[test]
+fn repeating_rows_in_a_wrapped_container_get_the_instances_the_data_holds() {
+    let rows: String = (0..4).map(|i| format!("<row><what>what {i}</what><when>{i}</when><why>why {i}</why></row>")).collect();
+    let form = layout_xml(&wrapped_form(&format!("<form><body><section>{rows}</section><notes>n</notes></body></form>"))).unwrap();
+    let all: Vec<&Widget> = form.pages.iter().flat_map(widgets).collect();
+    let whats: Vec<(&str, Option<&str>, f64)> =
+        all.iter().filter(|w| w.som.ends_with(".what[0]")).map(|w| (w.som.as_str(), w.value.as_deref(), w.rect.y)).collect();
+    assert_eq!(whats.len(), 4, "{whats:?}");
+    for (i, (som, value, _)) in whats.iter().enumerate() {
+        assert_eq!(*som, format!("form[0].body[0].section[0].row[{i}].what[0]"));
+        assert_eq!(*value, Some(format!("what {i}").as_str()));
+    }
+    // One under another, the section growing with them: what follows comes after the last.
+    assert!(whats.windows(2).all(|p| (p[1].2 - p[0].2 - 72.0).abs() < 0.01), "{whats:?}");
+    let notes = all.iter().find(|w| w.name == "notes").unwrap();
+    assert!(notes.rect.y >= whats[3].2 + 72.0 - 0.01, "{:?} after {whats:?}", notes.rect);
+    // Without data a row is there once.
+    let form = layout_xml(&wrapped_form("<form/>")).unwrap();
+    assert_eq!(form.pages.iter().flat_map(widgets).filter(|w| w.name.starts_with("what")).count(), 1);
+}
+
+#[test]
+fn a_multi_line_field_without_a_height_grows_to_hold_its_text() {
+    let place = |data: &str| {
+        let form = layout_xml(&wrapped_form(data)).unwrap();
+        let on = |name: &str| {
+            form.pages.iter().enumerate().find_map(|(i, p)| widgets(p).into_iter().find(|w| w.name == name).map(|w| (i, w.rect))).unwrap()
+        };
+        (on("notes"), on("after"))
+    };
+    // Little text: the minimum height.
+    let ((_, notes), (_, after)) = place("<form><body><notes>Short.</notes></body></form>");
+    assert!((notes.h - 108.0).abs() < 0.01, "{notes:?}");
+    assert!((after.y - notes.bottom()).abs() < 0.01);
+    // Forty lines: the field holds them, and what follows moves down.
+    let long: String = (0..40).map(|i| format!("Line {i} of the notes.\n")).collect();
+    let ((notes_page, grown), (after_page, after)) = place(&format!("<form><body><notes>{long}</notes></body></form>"));
+    assert!(grown.h > 40.0 * 11.0 && grown.h < 720.0, "{grown:?}");
+    assert_eq!(notes_page, after_page);
+    assert!((after.y - grown.bottom()).abs() < 0.01, "{after:?} after {grown:?}");
+    // A fixed height stays what it is.
+    let fixed = wrapped_form(&format!("<form><body><notes>{long}</notes></body></form>"))
+        .replace(r#"minH="1.5in"><ui><textEdit multiLine"#, r#"h="1.5in"><ui><textEdit multiLine"#);
+    let form = layout_xml(&fixed).unwrap();
+    let notes = form.pages.iter().flat_map(widgets).find(|w| w.name == "notes").unwrap();
+    assert!((notes.rect.h - 108.0).abs() < 0.01, "{:?}", notes.rect);
+}
+
+#[test]
+fn a_page_break_keeps_a_fields_border_with_the_field() {
+    // 6in of heading, then a bordered 5in field: it doesn't fit the 10in area and moves to
+    // the next page whole, leaving no piece of its border behind.
+    let body = r#"<subform name="body" layout="lr-tb" w="7.5in">
+  <draw name="head" w="7.5in" h="6in"><value><text>Head</text></value></draw>
+  <field name="f0" w="7.5in" h="5in"><border><edge/><fill><color value="230,230,230"/></fill></border><ui><textEdit multiLine="1"/></ui></field>
+  <field name="f1" w="7.5in" h="0.4in"><ui><textEdit/></ui></field>
+ </subform>"#;
+    let form = layout_xml(&one_area_form(r#"layout="tb""#, body)).unwrap();
+    assert_paginated(&form, 2, 2);
+    let below_head = |it: &&Item| match it {
+        Item::Fill { rect, .. } => rect.bottom() > 36.0 + 432.0 + 1.0,
+        Item::Line { from, to, .. } => from.1.max(to.1) > 36.0 + 432.0 + 1.0,
+        _ => false,
+    };
+    assert_eq!(form.pages[0].items.iter().filter(below_head).count(), 0, "{:?}", form.pages[0].items);
+    assert!(
+        form.pages[1].items.iter().any(|it| matches!(it, Item::Fill { rect, .. } if (rect.y - 36.0).abs() < 0.01 && (rect.h - 360.0).abs() < 0.01))
+    );
+}
+
+#[test]
+fn text_too_long_for_its_fixed_height_is_drawn_smaller_instead_of_over_what_follows() {
+    let words = "certification statement wording ".repeat(12);
+    let body = format!(
+        r#"<draw name="note" w="7.5in" h="0.3in"><font typeface="Arial" size="8pt"/><value><text>{words}</text></value></draw>
+ <draw name="short" w="7.5in" h="0.3in"><font typeface="Arial" size="8pt"/><value><text>Short</text></value></draw>"#
+    );
+    let form = layout_xml(&one_area_form(r#"layout="tb""#, &body)).unwrap();
+    let spans: Vec<&crate::text::Span> = form.pages[0].items.iter().filter_map(|i| if let Item::Text(s) = i { Some(s) } else { None }).collect();
+    let (short, note): (Vec<_>, Vec<_>) = spans.into_iter().partition(|s| s.text == "Short");
+    // Three lines at 8pt need 27.6pt; the box is 21.6pt high.
+    assert!(note.iter().all(|s| s.face.size < 8.0 && s.face.size >= 5.6), "{:?}", note.iter().map(|s| s.face.size).collect::<Vec<_>>());
+    assert!(note.iter().all(|s| s.baseline <= 36.0 + 21.6 + 0.5), "{:?}", note.iter().map(|s| s.baseline).collect::<Vec<_>>());
+    assert!(note.iter().all(|s| s.x + s.face.width(&s.text) <= 36.0 + 540.0 + 0.5));
+    // Text that fits keeps its size.
+    assert!((short[0].face.size - 8.0).abs() < 1e-9);
+}
+
+#[test]
+fn a_text_field_that_outgrows_a_page_continues_on_the_next_as_text() {
+    let long: String = (0..150).map(|i| format!("Line {i} of the notes.\n")).collect();
+    let form = layout_xml(&wrapped_form(&format!("<form><body><notes>{long}</notes><after>end</after></body></form>"))).unwrap();
+    assert!(form.pages.len() >= 3, "{} pages", form.pages.len());
+    assert!(form.warnings.iter().any(|w| w.starts_with("notes: its text is longer than a page")), "{:?}", form.warnings);
+    // Every line is there, in order, inside the content area of its page; no widget holds it.
+    let mut lines = Vec::new();
+    for (i, p) in form.pages.iter().enumerate() {
+        for it in &p.items {
+            if let Item::Text(s) = it
+                && s.text.starts_with("Line ")
+            {
+                assert!(s.baseline > 36.0 && s.baseline <= 36.0 + 720.0 + 0.01, "page {}: {:?} at {}", i + 1, s.text, s.baseline);
+                lines.push(s.text.clone());
+            }
+        }
+        assert!(widgets(p).iter().all(|w| w.name != "notes"));
+    }
+    assert_eq!(lines, (0..150).map(|i| format!("Line {i} of the notes.")).collect::<Vec<_>>());
+    // What follows comes after the last line, on the last page.
+    let last = form.pages.last().unwrap();
+    let after = widgets(last).into_iter().find(|w| w.name == "after").unwrap();
+    let last_line = last.items.iter().filter_map(|it| if let Item::Text(s) = it { Some(s.baseline) } else { None }).fold(0.0, f64::max);
+    assert!(after.rect.y >= last_line - 0.01 && after.rect.bottom() <= 36.0 + 720.0 + 0.01, "{:?} after {last_line}", after.rect);
+}
+
+#[test]
+fn the_form_packet_restores_the_presence_and_access_the_form_was_saved_with() {
+    // Three rows hidden in the template; a script showed the first two before the form was
+    // saved, and locked a field.
+    let row = |n: usize, presence: &str| {
+        format!(
+            r#"<subform name="row{n}" layout="lr-tb" w="7.5in"{presence}><field name="who" w="3in" h="0.4in"><ui><textEdit/></ui></field></subform>"#
+        )
+    };
+    let body = format!(
+        r#"<subform name="body" layout="lr-tb" w="7.5in">{}{}{}{}<subform name="rep" layout="lr-tb" w="7.5in"><occur max="-1"/><field name="x" w="3in" h="0.4in"><ui><textEdit/></ui></field></subform></subform>"#,
+        row(0, ""),
+        row(1, r#" presence="hidden""#),
+        row(2, r#" presence="hidden""#),
+        row(3, r#" presence="hidden""#)
+    );
+    let template = one_area_form(r#"layout="tb""#, &body);
+    let visible = |xdp: &str| -> Vec<String> { layout_xml(xdp).unwrap().pages.iter().flat_map(widgets).map(|w| w.som.clone()).collect() };
+    assert_eq!(visible(&template), ["form[0].body[0].row0[0].who[0]", "form[0].body[0].rep[0].x[0]"]);
+    let saved = r#"<form xmlns="http://www.xfa.org/schema/xfa-form/2.8/" checksum="x"><subform name="form">
+ <instanceManager name="_body"/>
+ <subform name="body">
+  <subform name="row0"><field name="who" access="readOnly"/></subform>
+  <subform name="row1" presence="visible"><field name="who" access="readOnly"><value override="1"/></field></subform>
+  <subform name="row2" presence="visible"/>
+  <subform name="row3" presence="hidden"/>
+  <subform name="rep"><field name="x"/></subform>
+  <subform name="rep" presence="hidden"><field name="x" access="readOnly"/></subform>
+  <subform name="nowhere" presence="hidden"/>
+ </subform>
+ <pageSet><pageArea name="page"/></pageSet>
+</subform></form>
+</xdp:xdp>"#;
+    let xdp = template.replace("</xdp:xdp>", saved);
+    assert_eq!(
+        visible(&xdp),
+        ["form[0].body[0].row0[0].who[0]", "form[0].body[0].row1[0].who[0]", "form[0].body[0].row2[0].who[0]", "form[0].body[0].rep[0].x[0]"],
+        "a later instance of a repeating subform says nothing about the template's one"
+    );
+    let form = layout_xml(&xdp).unwrap();
+    let locked: Vec<bool> = form.pages.iter().flat_map(widgets).map(|w| w.read_only).collect();
+    assert_eq!(locked, [true, true, false, false]);
+}
+
+#[test]
+fn a_flowed_subform_is_as_tall_as_its_content_whatever_its_minimum_height() {
+    // A bar with a stale 3in `minH` holds one 0.2in line; the row after it follows directly.
+    let body = |bar: &str| {
+        format!(
+            r#"<subform name="body" layout="lr-tb" w="7.5in"><subform name="bar" {bar} w="7.5in" minH="3in"><draw w="7.5in" h="0.2in"><value><text>Attachments</text></value></draw></subform><field name="who" w="3in" h="0.4in"><ui><textEdit/></ui></field></subform>"#
+        )
+    };
+    let top = |bar: &str| {
+        let form = layout_xml(&one_area_form(r#"layout="tb""#, &body(bar))).unwrap();
+        let w = widgets(&form.pages[0]);
+        w[0].rect.y
+    };
+    let flowed = top(r#"layout="lr-tb""#);
+    assert!((top(r#"layout="tb""#) - flowed).abs() < 0.01);
+    // A positioned subform keeps its minimum: nothing else says how tall it is.
+    assert!((top("") - flowed - (216.0 - 14.4)).abs() < 0.01, "{} against {flowed}", top(""));
+}
+
+#[test]
+fn the_form_packet_restores_a_caption_a_script_changed() {
+    let body = r#"<subform name="body" layout="tb" w="7.5in"><field name="bar" w="2in" h="0.3in"><ui><button/></ui><caption><value><text>Show Bar</text></value></caption></field></subform>"#;
+    let template = one_area_form(r#"layout="tb""#, body);
+    let caption = |xdp: &str| match &widgets(&layout_xml(xdp).unwrap().pages[0])[0].kind {
+        WidgetKind::Button { caption } => caption.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(caption(&template), "Show Bar");
+    let saved = r#"<form xmlns="http://www.xfa.org/schema/xfa-form/2.8/"><subform name="form"><subform name="body">
+ <field name="bar"><caption><value><text>Hide Bar</text></value></caption></field>
+</subform></subform></form>
+</xdp:xdp>"#;
+    assert_eq!(caption(&template.replace("</xdp:xdp>", saved)), "Hide Bar");
+}
+
+#[test]
+fn a_text_field_without_a_border_of_its_own_has_no_box() {
+    let body = r#"<subform name="body" layout="tb" w="7.5in"><field name="plain" w="3in" h="0.4in"><ui><textEdit/></ui></field><field name="boxed" w="3in" h="0.4in"><ui><textEdit><border><edge/></border></textEdit></ui></field><field name="tick" w="3in" h="0.4in"><ui><checkButton/></ui></field></subform>"#;
+    let form = layout_xml(&one_area_form(r#"layout="tb""#, body)).unwrap();
+    let shapes: Vec<BorderShape> = widgets(&form.pages[0]).iter().map(|w| w.border.shape).collect();
+    assert_eq!(shapes, [BorderShape::None, BorderShape::Full, BorderShape::Full]);
+}
+
+#[test]
+fn a_signed_signature_box_shows_the_signature_the_file_holds() {
+    let mut doc = Document::open(Arc::new(crate::fixtures::signed_shell())).unwrap();
+    render_into(&mut doc).unwrap();
+    let catalog = doc.get(doc.root().unwrap());
+    let acro = doc.resolve(catalog.as_dict().unwrap().get(b"AcroForm").unwrap());
+    let fields = doc.resolve(acro.as_dict().unwrap().get(b"Fields").unwrap()).as_array().unwrap().clone();
+    let laid: Vec<_> = fields.iter().map(|f| doc.resolve(f)).filter(|f| f.as_dict().unwrap().contains(SOM_KEY)).collect();
+    let (signed, unsigned) = (laid[0].as_dict().unwrap(), laid[1].as_dict().unwrap());
+    // The signature dictionary and the picture are the file's own objects, not copies.
+    let value = doc.resolve(signed.get(b"V").unwrap());
+    assert_eq!(value.as_dict().unwrap().name(b"Type"), Some(&b"Sig"[..]));
+    assert!(signed.get(b"V").unwrap().as_ref().is_some());
+    let shown = doc.resolve(signed.get(b"AP").unwrap());
+    let picture = doc.resolve(shown.as_dict().unwrap().get(b"N").unwrap());
+    assert!(matches!(&*picture, Object::Stream(s) if s.dict.name(b"Subtype") == Some(&b"Form"[..])));
+    assert_eq!(signed.int(b"Ff").unwrap_or(0) & 1, 1, "a signed box is not signed again");
+    assert!(!unsigned.contains(b"V") && !unsigned.contains(b"AP"));
+}
+
+#[test]
+fn a_carriage_return_and_line_feed_are_one_line_break() {
+    let lines = |t: &str| crate::text::plain(t).paragraphs.len();
+    assert_eq!(lines("one\r\ntwo\r\nthree"), 3);
+    assert_eq!(lines("one\ntwo\rthree"), 3);
+    assert_eq!(lines("one\r\n\r\ntwo"), 3, "an empty line stays");
+    // As the data holds it: character references, which the XML parser leaves alone.
+    let form = layout_xml(&wrapped_form("<form><body><notes>one&#xD;&#xA;two&#xD;&#xA;three</notes></body></form>")).unwrap();
+    let crlf = form.pages.iter().flat_map(widgets).find(|w| w.name == "notes").unwrap().rect.h;
+    let form = layout_xml(&wrapped_form("<form><body><notes>one&#xA;two&#xA;three</notes></body></form>")).unwrap();
+    let lf = form.pages.iter().flat_map(widgets).find(|w| w.name == "notes").unwrap().rect.h;
+    assert!((crlf - lf).abs() < 0.01);
+}

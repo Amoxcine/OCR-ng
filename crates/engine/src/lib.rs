@@ -13,6 +13,8 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 pub mod actions;
+pub mod camera;
+pub mod camera_edges;
 pub mod catalog;
 pub mod commands;
 pub mod compare;
@@ -50,7 +52,7 @@ pub use pdfcraft_forms::{
 };
 
 pub use pdfcraft_a11y as a11y;
-pub use pdfcraft_edit::{BlockStyle, PageImage, TextBlock, TextLine, first_undrawable};
+pub use pdfcraft_edit::{BlockStyle, PageImage, TextBlock, TextLine, first_undrawable, first_undrawable_plain, undrawable_message};
 pub use pdfcraft_measure as measure;
 pub use pdfcraft_xfa::Report as XfaLayout;
 
@@ -2096,10 +2098,20 @@ pub struct Session {
 /// Lay a dynamic XFA form out (pages and fields) and give its widgets appearances.
 fn xfa_layout(doc: &mut pdfcraft_cos::Document) -> Result<XfaLayout, String> {
     let report = pdfcraft_xfa::render_into(doc).map_err(|e| e.to_string())?;
+    xfa_redraw(doc)?;
+    Ok(report)
+}
+
+/// Give the fields of a laid-out XFA form their appearances. A signed signature box keeps the
+/// picture its signer's application drew.
+pub(crate) fn xfa_redraw(doc: &mut pdfcraft_cos::Document) -> Result<(), String> {
     for f in pdfcraft_forms::fields(doc) {
+        if f.kind == pdfcraft_forms::FieldKind::Signature && doc.get(f.obj).as_dict().is_some_and(|d| d.contains(b"V")) {
+            continue;
+        }
         pdfcraft_forms::redraw_field(doc, &f.name).map_err(|e| format!("{}: {e}", f.name))?;
     }
-    Ok(report)
+    Ok(())
 }
 
 /// The form's fields as the XFA data layer wants them.
@@ -2425,12 +2437,14 @@ impl Session {
         };
         let display = display_bytes(editor.as_ref(), &bytes);
         let renderer = RenderPool::new(display.clone(), render_threads(), config.clone());
-        let mut form = editor.as_ref().map(|e| pdfcraft_forms::fields(&e.cos)).unwrap_or_default();
-        let mut adopted = 0;
-        if let Some(e) = editor.as_ref() {
-            xfa::mark_script_buttons(&e.cos, &mut form);
-            adopted = pdfcraft_forms::adopted_page_fields(&e.cos);
-        }
+        let (form, adopted) = editor
+            .as_ref()
+            .map(|e| {
+                let mut fields = pdfcraft_forms::fields_with_adopted(&e.cos);
+                xfa::mark_script_buttons(&e.cos, &mut fields.items);
+                (fields.items, fields.adopted_page_fields)
+            })
+            .unwrap_or_default();
         // Fields the file lists only as page widgets are adopted leniently; the file says so.
         if adopted > 0
             && let Some(e) = &mut editor
@@ -2846,6 +2860,18 @@ impl Session {
         })
         .map_err(|_| EditError::Source(format!("{name}: the file could not be read")))?;
         Ok((kind, created?))
+    }
+
+    /// A file for Combine as PDF bytes: an image or text file is converted; a PDF is returned as
+    /// it is, unchecked (Combine reads it itself, with its password), as is a file named .pdf
+    /// without a `%PDF-` header, which the reader may still open.
+    pub fn as_pdf(&self, name: &str, bytes: &Arc<Vec<u8>>) -> Result<Arc<Vec<u8>>, EditError> {
+        let pdf = match source_kind(name, bytes) {
+            Some(SourceKind::Pdf) => true,
+            Some(SourceKind::Image | SourceKind::Text) => false,
+            None => name.to_ascii_lowercase().ends_with(".pdf"),
+        };
+        if pdf { Ok(bytes.clone()) } else { self.convert_to_pdf(name, bytes).map(|(_, pdf)| pdf) }
     }
 
     /// Reduce File Size: Acrobat's defaults (images above 225 ppi to 150 ppi, JPEG medium

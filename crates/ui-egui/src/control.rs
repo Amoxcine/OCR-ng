@@ -678,6 +678,7 @@ impl Host for crate::PdfCraftApp {
                 crate::QuickTool::Select => "select".to_string(),
                 crate::QuickTool::Hand => "hand".to_string(),
                 crate::QuickTool::Crop => "crop".to_string(),
+                crate::QuickTool::EnhanceCamera => "enhance-camera".to_string(),
                 crate::QuickTool::Redact => "redact".to_string(),
                 crate::QuickTool::AddText => "add-text".to_string(),
                 crate::QuickTool::EditText => "edit-text".to_string(),

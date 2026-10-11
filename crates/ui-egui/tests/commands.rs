@@ -155,6 +155,39 @@ fn disabled_commands_explain_themselves() {
 }
 
 #[test]
+fn a_tool_chosen_with_no_document_asks_for_one_and_runs_on_it() {
+    let dir = std::env::temp_dir().join(format!("pdfcraft-tool-open-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("picked.pdf");
+    std::fs::write(&path, fixture(2)).unwrap();
+    let pick = path.to_string_lossy().into_owned();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.pick_override = Some(vec![pick]);
+        app
+    });
+    h.run_steps(2);
+    h.state_mut().run_command("export.text");
+    assert!(h.state().toast.as_ref().is_none_or(|t| t.0 != "Open a document first"));
+    h.run_steps(3);
+    assert!(h.state().active.is_some(), "the picked file is open");
+    assert!(matches!(h.state().dialog, Some(Dialog::Export(_))), "and the tool runs on it: {:?}", h.state().dialog);
+    // Cancelled: nothing opens and nothing runs.
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.pick_override = Some(Vec::new());
+        app
+    });
+    h.run_steps(2);
+    h.state_mut().run_command("export.text");
+    h.run_steps(3);
+    assert!(h.state().active.is_none() && h.state().dialog.is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn shortcuts_run_registered_commands() {
     let mut h = harness();
     h.key_press_modifiers(Modifiers::COMMAND, Key::D);
@@ -378,6 +411,24 @@ fn view_menu_and_tooltips_write_shortcuts_for_the_platform() {
 }
 
 #[test]
+fn the_top_bar_save_button_names_its_shortcut_not_a_milestone() {
+    // #962: on Windows the Save button's tooltip and accessibility name read "Save (M4)",
+    // an internal milestone tag, while Print and Document properties named their shortcuts.
+    let mut h = harness();
+    h.ctx.set_os(OperatingSystem::Windows);
+    h.run_steps(2);
+    h.get_by_label("Save (Ctrl+S)");
+    h.get_by_label("Print (Ctrl+P)");
+    assert_eq!(h.query_all_by_label_contains("(M4)").count(), 0, "no milestone tag in the top bar");
+    assert_eq!(h.query_all_by_label_contains("⌘").count(), 0, "no ⌘ outside macOS");
+
+    let mut h = harness();
+    h.ctx.set_os(OperatingSystem::Mac);
+    h.run_steps(2);
+    h.get_by_label("Save (⌘S)");
+}
+
+#[test]
 fn full_screen_toggles_by_shortcut_and_command_and_escape_leaves() {
     let mut h = harness();
     h.key_press_modifiers(Modifiers::COMMAND, Key::L);
@@ -400,4 +451,28 @@ fn the_about_dialog_shows_the_running_version() {
     h.state_mut().execute("help.about");
     h.run_steps(3);
     h.get_by_label_contains(&format!("Version {}", env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
+fn command_w_closes_empty_macos_window_but_not_an_empty_windows_window() {
+    for (os, should_close) in [(OperatingSystem::Mac, true), (OperatingSystem::Windows, false)] {
+        let mut h = Harness::builder().with_size(egui::vec2(1000.0, 700.0)).build_eframe(|_cc| PdfCraftApp::new());
+        h.ctx.set_os(os);
+        h.run_steps(4);
+        assert!(h.state().views.is_empty());
+        h.event(egui::Event::Key { key: Key::W, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::COMMAND });
+        h.step();
+        let closes = h.output().viewport_output.values().any(|v| v.commands.iter().any(|c| matches!(c, egui::ViewportCommand::Close)));
+        assert_eq!(closes, should_close, "{os:?}: only an empty macOS window should close");
+    }
+}
+
+#[test]
+fn command_w_still_closes_the_document_tab_on_macos() {
+    let mut h = harness();
+    h.ctx.set_os(OperatingSystem::Mac);
+    h.run_steps(2);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::W);
+    h.run_steps(2);
+    assert!(h.state().views.is_empty(), "⌘W closes the clean document tab");
 }

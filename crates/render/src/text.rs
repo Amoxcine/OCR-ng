@@ -819,7 +819,23 @@ fn arrange(glyphs: &[TextGlyph]) -> (Vec<usize>, Vec<u32>, Vec<bool>) {
         for si in &blocks[b].0 {
             let s = &segs[*si];
             let mut idx = s.idx.clone();
-            // Reverse right-to-left runs (visual → logical).
+            // Word gaps relative to this line's typical letter gap (handles tracking).
+            let mut gaps: Vec<f32> = s.idx.windows(2).map(|w| glyphs[w[1]].rect[0] - glyphs[w[0]].rect[2]).collect();
+            gaps.sort_by(f32::total_cmp);
+            let typical = gaps.get(gaps.len() / 3).copied().unwrap_or(0.0).max(0.0);
+            let threshold = (typical + s.h * WORD_GAP).max(s.h * WORD_GAP);
+            // `spaces[w]`: a word gap left of the glyph at `idx[w]`, by position on the line, not
+            // by drawing order (#1062).
+            let mut spaces = vec![false; idx.len()];
+            for (space, pair) in spaces.iter_mut().skip(1).zip(s.idx.windows(2)) {
+                let &[p, c] = pair else { continue };
+                let gap = glyphs[c].rect[0] - glyphs[p].rect[2];
+                let (pt, ct) = (&glyphs[p].text, &glyphs[c].text);
+                let cjk = pt.chars().any(is_cjk) && ct.chars().any(is_cjk) && gap < s.h * 0.5;
+                let tight_cluster = (pt.chars().any(is_complex) || ct.chars().any(is_complex)) && gap < s.h * 0.6;
+                *space = gap > threshold && !cjk && !tight_cluster && !pt.trim().is_empty() && !ct.trim().is_empty();
+            }
+            // Reverse right-to-left runs (visual → logical), and the gaps between their glyphs with them.
             let rtl = |i: usize| glyphs[i].text.chars().any(is_rtl);
             let mut k = 0;
             while k < idx.len() {
@@ -831,28 +847,10 @@ fn arrange(glyphs: &[TextGlyph]) -> (Vec<usize>, Vec<u32>, Vec<bool>) {
                         e += 1;
                     }
                     idx[k..=e].reverse();
+                    spaces[k + 1..=e].reverse();
                     k = e + 1;
                 } else {
                     k += 1;
-                }
-            }
-            // Word gaps relative to this line's typical letter gap (handles tracking).
-            let mut gaps: Vec<f32> = s.idx.windows(2).map(|w| glyphs[w[1]].rect[0] - glyphs[w[0]].rect[2]).collect();
-            gaps.sort_by(f32::total_cmp);
-            let typical = gaps.get(gaps.len() / 3).copied().unwrap_or(0.0).max(0.0);
-            let threshold = (typical + s.h * WORD_GAP).max(s.h * WORD_GAP);
-            let mut spaces = vec![false; idx.len()];
-            for w in 1..s.idx.len() {
-                let (p, c) = (s.idx[w - 1], s.idx[w]);
-                let gap = glyphs[c].rect[0] - glyphs[p].rect[2];
-                let (pt, ct) = (&glyphs[p].text, &glyphs[c].text);
-                let cjk = pt.chars().any(is_cjk) && ct.chars().any(is_cjk) && gap < s.h * 0.5;
-                let tight_cluster = (pt.chars().any(is_complex) || ct.chars().any(is_complex)) && gap < s.h * 0.6;
-                if gap > threshold && !cjk && !tight_cluster && !pt.trim().is_empty() && !ct.trim().is_empty() {
-                    // Mark the space before glyph `c` wherever it ended up after RTL reversal.
-                    if let Some(pos) = idx.iter().position(|x| *x == c.max(p)) {
-                        spaces[pos] = true;
-                    }
                 }
             }
             for (k, g) in idx.iter().enumerate() {
@@ -1156,6 +1154,21 @@ mod tests {
         let mut v = Vec::new();
         word(&mut v, "每个字", 10.0, 10.0, 9.0);
         assert_eq!(layout(v).plain_text(), "每个字");
+    }
+
+    /// #1062: the word gap stays between the runs when the right-hand run is drawn first, and
+    /// between the words of a right-to-left line.
+    #[test]
+    fn word_gaps_follow_position_not_drawing_order() {
+        let mut v = Vec::new();
+        word(&mut v, "19.4", 40.0, 10.0, 6.0);
+        word(&mut v, "20.0", 10.0, 10.0, 6.0);
+        assert_eq!(layout(v).plain_text(), "20.0 19.4");
+        let mut v = Vec::new();
+        // "שלום עולם" drawn visually: עולם reversed on the left, שלום reversed on the right.
+        word(&mut v, "םלוע", 10.0, 10.0, 6.0);
+        word(&mut v, "םולש", 40.0, 10.0, 6.0);
+        assert_eq!(layout(v).plain_text(), "שלום עולם");
     }
 
     /// Two lines, "ab cd" and "e fg": words stop at blank glyphs, word gaps and line ends.

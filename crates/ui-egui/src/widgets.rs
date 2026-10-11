@@ -42,15 +42,20 @@ pub fn pill_button(ui: &mut egui::Ui, label: &str, primary: bool) -> Response {
 
 /// Icon + label, transparent until hovered.
 pub fn ghost_button(ui: &mut egui::Ui, icon: &str, label: &str) -> Response {
+    ghost_button_sized(ui, icon, label, 30.0)
+}
+
+/// [`ghost_button`] at a given height (the macOS title bar is shorter than the tab strip elsewhere).
+pub fn ghost_button_sized(ui: &mut egui::Ui, icon: &str, label: &str, height: f32) -> Response {
     let t = Tokens::get(ui.ctx());
     let font = theme::medium(13.0);
     let w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), font.clone(), t.text).size().x);
-    let (rect, resp) = ui.allocate_exact_size(vec2(w + 38.0, 30.0), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(w + 38.0, height), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label));
     if resp.hovered() {
         ui.painter().rect_filled(rect, CornerRadius::same(6), t.hover);
     }
-    icons::paint(ui, Rect::from_min_size(rect.min + vec2(6.0, 6.0), vec2(18.0, 18.0)), icon, 17.0, t.icon);
+    icons::paint(ui, Rect::from_min_size(rect.min + vec2(6.0, (height - 18.0) / 2.0), vec2(18.0, 18.0)), icon, 17.0, t.icon);
     ui.painter().text(rect.left_center() + vec2(30.0, 0.0), Align2::LEFT_CENTER, label, font, t.text);
     resp
 }

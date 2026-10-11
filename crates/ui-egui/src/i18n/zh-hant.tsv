@@ -159,7 +159,7 @@
 	Signature panel	簽名面板
 	{month} {day}, {y}	{month}{day}日，{y}年
 	The document's security settings don't allow filling in form fields	文件安全設定不允許填寫表單欄位
-	{name} is read-only	{name}為只讀
+	{name} is read-only	{name} 為唯讀
 	{name} has no action	{name}沒有動作
 	Previous month	上個月
 	Next month	下個月
@@ -244,7 +244,7 @@
 	This field is locked. Unlock it to change its properties.	此欄位已鎖定。解鎖後可更改其屬性。
 	Tooltip:	提示：
 	Common Properties	常規屬性
-	Read Only	只讀
+	Read Only	唯讀
 	Required	必填
 	Font Size:	字號：
 	Auto	自動
@@ -274,14 +274,14 @@
 	Check box is checked by default	預設選中核取方塊
 	Button is checked by default	預設選中按鈕
 	Buttons with the same name and value are selected in unison	同名同值的按鈕一起選中
-	Item:	專案：
-	Item List	專案列表
+	Item:	項目：
+	Item List	項目清單
 	Up	上移
 	Delete {o}	刪除 {o}
 	Add the choices people pick from.	新增供人選擇的選項。
 	Default:	預設值：
 	(none)	（無）
-	Sort items	排序專案
+	Sort items	排序項目
 	Allow user to enter custom text	允許使用者輸入自定義文字
 	Multiple selection	多選
 	Commit selected value immediately	立即提交所選值
@@ -627,8 +627,8 @@
 	Collapse	摺疊
 	Expand	展開
 	{rule} - {status}	{rule} - {status}
-	Passed	透過
-	Failed	未透過
+	Passed	通過
+	Failed	未通過
 	Needs manual check	需要人工檢驗
 	Skipped	已跳過
 	Fix	修復
@@ -684,7 +684,7 @@
 	Page will not cause screen flicker	頁面不會導致螢幕閃爍
 	Animation that flashes can cause seizures. Check scripts and media for flicker.	閃爍的動畫可能導致癲癇發作。請檢驗指令碼和媒體是否存在閃爍。
 	Scripts	指令碼
-	No inaccessible scripts	沒有無障礙指令碼
+	No inaccessible scripts	沒有妨礙無障礙操作的指令碼
 	Timed responses	限時回應
 	Page does not require timed responses	頁面不需要限時回應
 	People may need more time to respond. Check that nothing has a time limit.	人們可能需要更多時間來回應。請檢驗確認沒有時間限制。
@@ -712,14 +712,14 @@
 	Other elements alternate text	其他元素替代文字
 	Other elements that require alternate text	需要替代文字的其他元素
 	Formulas and similar non-text elements need alternate text. Add alternate text to them.	公式及類似非文字元素需要替代文字。請為它們新增替代文字。
-	Rows	行
+	Rows	列
 	TR must be a child of Table, THead, TBody, or TFoot	TR 必須是 Table、THead、TBody 或 TFoot 的子級
-	Table cells belong in a row. Fix the table's tags.	表格儲存格應位於行內。請修復表格標記。
+	Table cells belong in a row. Fix the table's tags.	表格儲存格應位於列內。請修正表格標記。
 	Headers	表頭
 	Tables should have headers	表格應有表頭
-	Header cells (TH) tell listeners what each column or row holds. Mark the header cells.	表頭儲存格（TH）告訴聽者每列或每行包含的內容。請標記表頭儲存格。
+	Header cells (TH) tell listeners what each column or row holds. Mark the header cells.	表頭儲存格（TH）讓聽者知道每欄或每列的內容。請標記表頭儲存格。
 	Regularity	規則性
-	Tables must contain the same number of columns in each row and rows in each column	表格每行必須包含相同數量的列，每列必須包含相同數量的行
+	Tables must contain the same number of columns in each row and rows in each column	表格每列的欄數必須相同，每欄的列數也必須相同
 	Irregular tables confuse cell navigation. Give every row the same number of cells (counting spans).	不規則的表格會妨礙儲存格導覽。請讓每一列具有相同數量的儲存格，並計入合併儲存格。
 	Summary	摘要
 	Tables must have a summary	表格必須有摘要
@@ -1046,7 +1046,7 @@
 	Dark gray theme	深灰色主題
 	Light theme	淺色主題
 	Print ({key})	列印（{key}）
-	Save (M4)	儲存（M4）
+	Save ({key})	儲存（{key}）
 	Document properties ({key})	文件內容（{key}）
 	Action Wizard…	動作精靈…
 	Add Bates numbering…	新增 Bates 編號…
@@ -1502,16 +1502,16 @@
 	Opened, but its security settings don't allow combining. Enter the permissions password.	已開啟，但其安全性設定不允許合併。請輸入權限密碼。
 	Unlocked: the combined file won't be password-protected	已解除鎖定：合併後的檔案將不受密碼保護
 	Unlocked {n} of {m} files	已解除鎖定 {m} 個檔案中的 {n} 個
-	Drop PDFs or folders here, or choose them.	將 PDF 或資料夾拖放到此處，或選取它們。
+	Drop PDFs, images, text files or folders here, or choose them.	將 PDF、圖片、文字檔案或資料夾拖放到此處，或選取它們。
 	Add folder…	新增資料夾…
 	Add folder and subfolders…	新增資料夾及子資料夾…
 	More ways to add files	更多新增檔案的方式
-	Every PDF in the folder	資料夾中的所有 PDF
-	Every PDF in the folder and the folders inside it	資料夾及其子資料夾中的所有 PDF
+	Every PDF, image and text file in the folder	資料夾中的所有 PDF、圖片和文字檔案
+	Every PDF, image and text file in the folder and the folders inside it	資料夾及其子資料夾中的所有 PDF、圖片和文字檔案
 	Add folder	新增資料夾
 	Add folder and subfolders	新增資料夾及子資料夾
-	No PDFs found in {folder}	在 {folder} 中找不到 PDF
-	Added the first {n} PDFs in {folder}	已新增 {folder} 中的前 {n} 個 PDF
+	No PDFs, images or text files found in {folder}	在 {folder} 中找不到 PDF、圖片或文字檔案
+	Added the first {n} files in {folder}	已新增 {folder} 中的前 {n} 個檔案
 	Click to sort, drag to move the column. Drag its edge to resize it.	按一下以排序，拖曳以移動欄。拖曳欄邊緣可調整寬度。
 	Reset columns	重設欄
 	Remove {n} files	刪除 {n} 個檔案
@@ -1529,7 +1529,7 @@
 	{n} files need attention	{n} 個檔案需要處理
 	{name} can't be combined: {why}	無法合併 {name}：{why}
 	Check the pages of {name}: {why}	請檢查 {name} 的頁碼：{why}
-	Add the PDFs to combine	新增要合併的 PDF
+	Add the files to combine	新增要合併的檔案
 	File name	檔案名稱
 	Warnings	警告
 	Drag to reorder	拖曳以重新排序
@@ -1542,6 +1542,10 @@
 	Password-protected	受密碼保護
 	Its security settings don't allow copying pages	其安全性設定不允許複製頁面
 	Can't be read: {e}	無法讀取：{e}
+	Leave out files that can't be read?	要排除無法讀取的檔案嗎？
+	These files can't be read, so they won't be in the combined PDF:	這些檔案無法讀取，因此不會包含在合併後的 PDF 中：
+	Combine the rest	合併其餘檔案
+	and {n} more	以及另外 {n} 個
 	Includes unsaved changes	包含未儲存的變更
 	Pages of {name} to combine, e.g. 1-3, 6	要合併的{name}的頁面，例如 1-3、6
 	Remove {name}	刪除{name}
@@ -2112,3 +2116,7 @@ key	Space	空格
 	Type the corrected text; the preview shows the real result.	輸入更正後的文字;預覽顯示真實結果。
 	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	請使用頁面其他地方出現的字母;如果重音符號出現在頁面某處,就可以合成帶重音的字母。
 	rewritten without loss	已無損重寫
+	Table rows belong directly in a table or its head, body or foot. Fix the table's tags.	表格列應直接位於表格或其表頭、主體、表尾內。請修正表格標記。
+	Enhance camera image	增強相機影像
+	Drag the corners onto the document's edges, then choose Enhance page.	將四個角拖曳到文件邊緣，然後選擇「增強頁面」。
+	Enhance page	增強頁面

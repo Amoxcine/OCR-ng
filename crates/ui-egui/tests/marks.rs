@@ -64,6 +64,7 @@ fn watermark_and_background_dialogs() {
     h.state_mut().execute("edit.watermark");
     h.run_steps(2);
     assert!(h.query_by(|n| n.label().as_deref() == Some("OK") && n.is_disabled()).is_some(), "OK waits for text");
+    h.get_by_label("Offset from centre");
     h.state_mut().marks_draft.wm.text = "DRAFT".into();
     h.run_steps(2);
     h.get_by_label("OK").click();

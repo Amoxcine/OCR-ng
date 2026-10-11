@@ -115,7 +115,7 @@
 	Convert	変換
 	E-Sign	電子署名
 	Print ({key})	印刷（{key}）
-	Save (M4)	保存（M4）
+	Save ({key})	保存（{key}）
 	Document properties ({key})	文書のプロパティ（{key}）
 	Find tools and commands	ツールとコマンドを検索
 	Fit to height	高さに合わせる
@@ -785,6 +785,7 @@
 	Rotation	回転
 	Appear behind page	ページの背面に表示
 	Appear on top of page	ページの前面に表示
+	Offset from centre	中心からのオフセット
 	From colour	色を指定
 	Page Range Options	ページ範囲のオプション
 	Preview: page {p} of {n}	プレビュー: {n} ページ中 {p} ページ
@@ -1594,16 +1595,16 @@
 	Opened, but its security settings don't allow combining. Enter the permissions password.	開けましたが、セキュリティ設定により結合が許可されていません。権限パスワードを入力してください。
 	Unlocked: the combined file won't be password-protected	ロック解除済み: 結合後のファイルはパスワードで保護されません
 	Unlocked {n} of {m} files	{m} 個中 {n} 個のファイルのロックを解除しました
-	Drop PDFs or folders here, or choose them.	ここに PDF またはフォルダーをドロップするか、選択してください。
+	Drop PDFs, images, text files or folders here, or choose them.	ここに PDF、画像、テキストファイル、またはフォルダーをドロップするか、選択してください。
 	Add folder…	フォルダーを追加…
 	Add folder and subfolders…	フォルダーとサブフォルダーを追加…
 	More ways to add files	ファイルを追加するその他の方法
-	Every PDF in the folder	フォルダー内のすべての PDF
-	Every PDF in the folder and the folders inside it	フォルダーとその中のフォルダーにあるすべての PDF
+	Every PDF, image and text file in the folder	フォルダー内のすべての PDF、画像、テキストファイル
+	Every PDF, image and text file in the folder and the folders inside it	フォルダーとその中のフォルダーにあるすべての PDF、画像、テキストファイル
 	Add folder	フォルダーを追加
 	Add folder and subfolders	フォルダーとサブフォルダーを追加
-	No PDFs found in {folder}	{folder} に PDF が見つかりません
-	Added the first {n} PDFs in {folder}	{folder} の最初の {n} 個の PDF を追加しました
+	No PDFs, images or text files found in {folder}	{folder} に PDF、画像、テキストファイルが見つかりません
+	Added the first {n} files in {folder}	{folder} の最初の {n} 個のファイルを追加しました
 	Click to sort, drag to move the column. Drag its edge to resize it.	クリックで並べ替え、ドラッグで列を移動します。列の端をドラッグすると幅を変更できます。
 	Reset columns	列をリセット
 	Remove {n} files	{n} 個のファイルを削除
@@ -1621,7 +1622,7 @@
 	{n} files need attention	{n} 個のファイルに問題があります
 	{name} can't be combined: {why}	{name} は結合できません: {why}
 	Check the pages of {name}: {why}	{name} のページ指定を確認してください: {why}
-	Add the PDFs to combine	結合する PDF を追加
+	Add the files to combine	結合するファイルを追加
 	File name	ファイル名
 	Warnings	警告
 	Drag to reorder	ドラッグして並べ替え
@@ -1634,6 +1635,10 @@
 	Password-protected	パスワードで保護されています
 	Its security settings don't allow copying pages	セキュリティ設定によりページのコピーが許可されていません
 	Can't be read: {e}	読み込めません: {e}
+	Leave out files that can't be read?	読み込めないファイルを除外しますか？
+	These files can't be read, so they won't be in the combined PDF:	次のファイルは読み込めないため、結合した PDF には含まれません:
+	Combine the rest	残りを結合
+	and {n} more	ほか {n} 件
 	Includes unsaved changes	未保存の変更を含みます
 	Pages of {name} to combine, e.g. 1-3, 6	結合する {name} のページ（例: 1-3, 6）
 	Remove {name}	{name} を削除
@@ -2226,3 +2231,6 @@ key	Space	スペース
 	Type the corrected text; the preview shows the real result.	修正後のテキストを入力してください。プレビューは実際の結果を表示します。
 	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	このページの他の場所にある文字を使ってください。アクセント付きの文字は、そのアクセントがページのどこかにあれば合成できます。
 	rewritten without loss	劣化なしで書き直し
+	Enhance camera image	カメラ画像を補正
+	Drag the corners onto the document's edges, then choose Enhance page.	四隅を文書の端までドラッグしてから、「ページを補正」を選択します。
+	Enhance page	ページを補正

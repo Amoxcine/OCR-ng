@@ -375,6 +375,11 @@ pub struct DocView {
     pub pending_redaction: Option<(usize, Vec<[f64; 8]>)>,
     /// A crop rectangle being dragged (Crop tool).
     pub crop_drag: crate::crop::CropDrag,
+    /// Enhance ▸ Camera image: the quadrilateral being placed.
+    pub camera: Option<crate::camera_ui::CameraQuad>,
+    /// Enhance ▸ Camera image: the page just enhanced, while the bar offers rotate, crop and
+    /// organize.
+    pub camera_done: Option<usize>,
     /// Use a certificate: a signature rectangle being drawn, or an empty signature field clicked.
     pub sign: crate::sign_ui::SignView,
     /// Organize: the pages being dragged to a new place.
@@ -448,6 +453,16 @@ pub enum ViewAction {
     },
     /// Paste copied pages after the selection.
     PastePages,
+    /// Enhance ▸ Camera image: straighten what the corners enclose.
+    EnhanceCamera,
+    /// Leave Enhance ▸ Camera image (Cancel before Enhance page, Done after it).
+    CancelCamera,
+    /// After Enhance page: turn the enhanced page a quarter.
+    CameraRotate {
+        clockwise: bool,
+    },
+    /// After Enhance page: leave the tool for this command (Crop pages, Organize pages).
+    CameraNext(&'static str),
 }
 
 impl DocView {
@@ -568,6 +583,8 @@ impl DocView {
             redact_drag: None,
             pending_redaction: None,
             crop_drag: None,
+            camera: None,
+            camera_done: None,
             sign: Default::default(),
             org_drag: None,
             panel_drag: None,
@@ -1680,7 +1697,9 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context) {
     }
     let key = |k| ctx.input(|i| i.key_pressed(k));
     if key(Key::Escape) {
-        if view.selection.is_some() {
+        if view.camera.is_some() || view.camera_done.is_some() {
+            view.pending_action = Some(ViewAction::CancelCamera);
+        } else if view.selection.is_some() {
             view.selection = None;
         } else {
             view.find = None;
@@ -1929,6 +1948,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         QuickTool::Hand
         | QuickTool::Measure(_)
         | QuickTool::Crop
+        | QuickTool::EnhanceCamera
         | QuickTool::Fill(_)
         | QuickTool::Field(_)
         | QuickTool::AddText
@@ -2251,6 +2271,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             if matches!(tool, QuickTool::MarqueeZoom | QuickTool::Snapshot) {
                 crate::zoom_snap::page_input(ui, &resp, &xf, i, view);
             }
+            if tool == QuickTool::EnhanceCamera {
+                crate::camera_ui::page_input(ui, &resp, &xf, i, view, can_modify);
+            }
             if tool == QuickTool::Crop && crate::crop::page_input(ui, &resp, &xf, i, info, view, can_crop) {
                 view.current = i;
                 open_boxes = true;
@@ -2445,6 +2468,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             if tool == QuickTool::EditText {
                 crate::object_ui::paint(painter, &xf, i, info, &view.objects);
                 crate::scan_edit_ui::paint(ui.ctx(), painter, &xf, i, info, view);
+            }
+            if tool == QuickTool::EnhanceCamera {
+                crate::camera_ui::paint(painter, &xf, i, view);
             }
             if tool == QuickTool::Link {
                 crate::link_ui::paint(ui, painter, &xf, i, info, &doc_links, view);
@@ -2657,6 +2683,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         });
     }
     find_bar(view, info.pages.len(), avail, ui, &t);
+    if tool == QuickTool::EnhanceCamera {
+        crate::camera_ui::bar(ui.ctx(), view, avail, &t, can_modify);
+    }
     if let Some(e) = comments::composer(ui.ctx(), view, info, prefs) {
         view.pending_edit = Some(e);
     }

@@ -423,6 +423,7 @@
 	Rotation	Rotação
 	Appear behind page	Exibir atrás da página
 	Appear on top of page	Exibir sobre a página
+	Offset from centre	Deslocamento a partir do centro
 	From colour	A partir da cor
 	Page Range Options	Opções de intervalo de páginas
 	Preview: page {p} of {n}	Pré-visualização: página {p} de {n}
@@ -1032,7 +1033,7 @@
 	Dark gray theme	Tema cinza escuro
 	Light theme	Tema claro
 	Print ({key})	Imprimir ({key})
-	Save (M4)	Salvar (M4)
+	Save ({key})	Salvar ({key})
 	Document properties ({key})	Propriedades do documento ({key})
 	Action Wizard…	Assistente de ações…
 	Add Bates numbering…	Adicionar numeração Bates…
@@ -1941,14 +1942,14 @@
 	Add open documents	Adicionar documentos abertos
 	All open documents	Todos os documentos abertos
 	No documents are open	Nenhum documento está aberto
-	Add the PDFs to combine	Adicionar os PDFs para combinar
-	Drop PDFs or folders here, or choose them.	Solte PDFs ou pastas aqui, ou escolha-os.
+	Add the files to combine	Adicionar os arquivos para combinar
+	Drop PDFs, images, text files or folders here, or choose them.	Solte PDFs, imagens, arquivos de texto ou pastas aqui, ou escolha-os.
 	Add folder…	Adicionar pasta…
 	More ways to add files	Mais formas de adicionar arquivos
 	Add folder	Adicionar pasta
-	Every PDF in the folder	Todo PDF da pasta
+	Every PDF, image and text file in the folder	Todo PDF, imagem e arquivo de texto da pasta
 	Add folder and subfolders…	Adicionar pasta e subpastas…
-	Every PDF in the folder and the folders inside it	Todo PDF da pasta e das pastas dentro dela
+	Every PDF, image and text file in the folder and the folders inside it	Todo PDF, imagem e arquivo de texto da pasta e das pastas dentro dela
 	Add folder and subfolders	Adicionar pasta e subpastas
 	PDF, images and text	PDF, imagens e texto
 	Files are combined from top to bottom. Leave Pages empty to take every page.	Os arquivos são combinados de cima para baixo. Deixe Páginas em branco para incluir todas as páginas.
@@ -1967,6 +1968,10 @@
 	Opened, but its security settings don't allow combining. Enter the permissions password.	Aberto, mas as configurações de segurança dele não permitem combinar. Digite a senha de permissões.
 	Its security settings don't allow copying pages	As configurações de segurança dele não permitem copiar páginas
 	Can't be read: {e}	Não é possível ler: {e}
+	Leave out files that can't be read?	Deixar de fora os arquivos que não podem ser lidos?
+	These files can't be read, so they won't be in the combined PDF:	Estes arquivos não podem ser lidos, então não estarão no PDF combinado:
+	Combine the rest	Combinar os demais
+	and {n} more	e mais {n}
 	Unlocked: the combined file won't be password-protected	Desbloqueado: o arquivo combinado não será protegido por senha
 	Protected: the combined file won't keep its security settings	Protegido: o arquivo combinado não manterá as configurações de segurança
 	Unlock {name}	Desbloquear {name}
@@ -2040,7 +2045,7 @@ action wizard	Start	Iniciar
 	A script	Um script
 	About	Sobre
 	Add {what}	Adicionar {what}
-	Added the first {n} PDFs in {folder}	Adicionados os primeiros {n} PDFs de {folder}
+	Added the first {n} files in {folder}	Adicionados os primeiros {n} arquivos de {folder}
 	Align fields	Alinhar campos
 	Another file dialog is still open. Finish with it first.	Outra janela de arquivos ainda está aberta. Conclua-a primeiro.
 	Basic constraints	Restrições básicas
@@ -2081,7 +2086,7 @@ action wizard	Start	Iniciar
 	Model	Modelo
 	Models	Modelos
 	Name (A–Z)	Nome (A–Z)
-	No PDFs found in {folder}	Nenhum PDF encontrado em {folder}
+	No PDFs, images or text files found in {folder}	Nenhum PDF, imagem ou arquivo de texto encontrado em {folder}
 	None of those files can be made into a PDF; use PDFs, images or .txt files	Nenhum desses arquivos pode virar PDF; use PDFs, imagens ou arquivos .txt
 	Opens the printer driver's preferences. They are saved for every print from this computer; the copies, two-sided, grayscale and paper chosen here still apply.	Abre as preferências do driver da impressora. Elas valem para toda impressão deste computador; as cópias, frente e verso, escala de cinza e papel escolhidos aqui continuam valendo.
 	Optimization cancelled	Otimização cancelada
@@ -2227,3 +2232,6 @@ key	Space	Espaço
 	Type the corrected text; the preview shows the real result.	Digite o texto corrigido; a prévia mostra o resultado real.
 	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Use letras que aparecem em outra parte da página; letras acentuadas podem ser compostas quando o acento aparece em algum lugar da página.
 	rewritten without loss	regravada sem perda
+	Enhance camera image	Aprimorar foto da câmera
+	Drag the corners onto the document's edges, then choose Enhance page.	Arraste os cantos até as bordas do documento e escolha Aprimorar página.
+	Enhance page	Aprimorar página

@@ -324,3 +324,36 @@ pub fn shell(xdp: &str) -> Vec<u8> {
     ];
     assemble(objs)
 }
+
+/// A dynamic form with two signature boxes of which `sign` has been signed: the file holds the
+/// field a signing application leaves (named by its SOM path, its value a signature dictionary)
+/// and the picture drawn in the box, a solid blue rectangle.
+pub fn signed_shell() -> Vec<u8> {
+    let xdp = r##"<?xml version="1.0" encoding="UTF-8"?>
+<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/">
+<template xmlns="http://www.xfa.org/schema/xfa-template/3.3/">
+<subform name="form" layout="tb">
+ <pageSet><pageArea name="page"><contentArea x="0.5in" y="0.5in" w="7.5in" h="10in"/><medium short="8.5in" long="11in"/></pageArea></pageSet>
+ <subform name="body" layout="tb" w="7.5in">
+  <field name="sign" w="3in" h="1in"><ui><signature/></ui></field>
+  <field name="other" w="3in" h="1in"><ui><signature/></ui></field>
+ </subform>
+</subform>
+</template>
+</xdp:xdp>
+"##;
+    let picture = "0 0 1 rg 0 0 100 40 re f";
+    let objs: Vec<Vec<u8>> = vec![
+        b"<< /Type /Catalog /Pages 2 0 R /NeedsRendering true /AcroForm << /XFA 5 0 R /Fields [6 0 R] /SigFlags 3 >> >>".to_vec(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>".to_vec(),
+        b"<< /Length 44 >>\nstream\nBT /F1 12 Tf 72 700 Td (Please wait...) Tj ET\nendstream".to_vec(),
+        format!("<< /Length {} >>\nstream\n{xdp}\nendstream", xdp.len()).into_bytes(),
+        b"<< /T (form[0]) /Kids [7 0 R] >>".to_vec(),
+        b"<< /T (body[0]) /Parent 6 0 R /Kids [8 0 R] >>".to_vec(),
+        b"<< /T (sign[0]) /Parent 7 0 R /FT /Sig /V 9 0 R /Type /Annot /Subtype /Widget /Rect [0 0 0 0] /AP << /N 10 0 R >> >>".to_vec(),
+        b"<< /Type /Sig /Name (A Signer) >>".to_vec(),
+        format!("<< /Type /XObject /Subtype /Form /BBox [0 0 100 40] /Length {} >>\nstream\n{picture}\nendstream", picture.len()).into_bytes(),
+    ];
+    assemble(objs)
+}

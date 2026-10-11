@@ -29,7 +29,7 @@ fn files_picker(purpose: FilePurpose) -> rfd::AsyncFileDialog {
     if purpose == FilePurpose::RedactWords {
         return dialog.add_filter(tl!("Text"), &["txt"]);
     }
-    if !matches!(purpose, FilePurpose::CreateMultiple | FilePurpose::InsertPages) {
+    if !matches!(purpose, FilePurpose::CreateMultiple | FilePurpose::InsertPages | FilePurpose::Combine) {
         return dialog.add_filter("PDF", &["pdf"]);
     }
     let all: Vec<&str> = std::iter::once("pdf").chain(pdfcraft_engine::CONVERTIBLE).collect();

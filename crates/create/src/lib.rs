@@ -314,7 +314,10 @@ fn png_image(name: &str, bytes: &[u8]) -> Result<Embedded, CreateError> {
         _ => (72.0, 72.0),
     };
     let icc = reader.info().icc_profile.as_ref().map(|p| p.to_vec());
-    let mut buf = vec![0; reader.output_buffer_size().ok_or_else(|| bad("image too large".into()))?];
+    // The png crate's limits don't cover the frame buffer, sized by the header alone: a small
+    // file claiming enormous dimensions must not make it allocate (and fill) gigabytes.
+    let size = reader.output_buffer_size().filter(|n| *n <= MAX_DECODED_BYTES).ok_or_else(|| bad("image too large".into()))?;
+    let mut buf = vec![0; size];
     let frame = reader.next_frame(&mut buf).map_err(|e| bad(e.to_string()))?;
     let (w, h) = (frame.width, frame.height);
     let data = &buf[..frame.buffer_size()];
@@ -385,8 +388,9 @@ fn decoded(name: &str, bytes: &[u8], format: image::ImageFormat) -> Result<Embed
     Ok(rgba_image(rgba.as_raw(), rgba.dimensions(), (72.0, 72.0)))
 }
 
-/// Most decoded bytes one TIFF page may take: room for the 768 MiB CMYK poster in #665, twice over.
-const MAX_TIFF_DECODED_BYTES: usize = 2 << 30;
+/// Most decoded bytes one TIFF page or PNG may take: room for the 768 MiB CMYK poster in #665,
+/// twice over.
+const MAX_DECODED_BYTES: usize = 2 << 30;
 
 /// Every page of a TIFF (multi-page scans become multi-page PDFs).
 fn tiff_pages(name: &str, bytes: &[u8]) -> Result<Vec<Embedded>, CreateError> {
@@ -398,7 +402,7 @@ fn tiff_pages(name: &str, bytes: &[u8]) -> Result<Vec<Embedded>, CreateError> {
     // 12000x16000 CMYK is 768 MiB. Raise it, but keep a ceiling so a tiny file claiming
     // enormous dimensions can't ask for unbounded memory.
     let mut limits = Limits::default();
-    limits.decoding_buffer_size = MAX_TIFF_DECODED_BYTES;
+    limits.decoding_buffer_size = MAX_DECODED_BYTES;
     let mut dec = Decoder::new(std::io::Cursor::new(bytes)).map_err(|e| bad(e.to_string()))?.with_limits(limits);
     let mut out = Vec::new();
     loop {

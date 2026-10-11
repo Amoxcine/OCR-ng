@@ -248,6 +248,34 @@ pub fn turn_about_centre(rect: [f64; 4], quarters: i32, flip_h: bool, flip_v: bo
     [a, b, c, d, cx - a * cx - c * cy, cy - b * cx - d * cy]
 }
 
+/// For a `Do` at `op` that sits alone in `q re W n cm Do Q`: the index of the `re` and the `cm` matrix.
+/// That clip belongs to this image only, so it may move with it. A `cm` this move put before the
+/// `re` earlier (`q cm re W n cm Do Q`) keeps the pattern, so the image can be moved again.
+fn exclusive_clip(ops: &[Op], op: usize) -> Option<(usize, Matrix)> {
+    let at = op.checked_sub(4)?;
+    let mut q = at.checked_sub(1)?;
+    while ops.get(q)?.is("cm") {
+        q = q.checked_sub(1)?;
+    }
+    let ok = ops.get(q)?.is("q")
+        && ops.get(at)?.is("re")
+        && (ops.get(at + 1)?.is("W") || ops.get(at + 1)?.is("W*"))
+        && ops.get(at + 2)?.is("n")
+        && ops.get(at + 3)?.is("cm")
+        && ops.get(op + 1)?.is("Q");
+    if !ok {
+        return None;
+    }
+    Some((at, Matrix(ops.get(at + 3)?.nums::<6>()?)))
+}
+
+/// The `cm` to put before the clip so that user-space transform `t` also moves the clip:
+/// the clip is drawn in the CTM before the image's own `cm` (`cm` · that = `draw`).
+fn clip_matrix(draw: Matrix, cm: Matrix, t: Matrix) -> Option<Matrix> {
+    let outer = cm.invert()?.then(&draw);
+    Some(outer.then(&t).then(&outer.invert()?))
+}
+
 /// Change image `index` (from [`page_images`]) on `page`.
 pub fn change_image(doc: &mut Document, page: usize, index: usize, change: &ImageChange) -> Result<(), EditError> {
     let images = page_images(doc, page)?;
@@ -258,6 +286,7 @@ pub fn change_image(doc: &mut Document, page: usize, index: usize, change: &Imag
     let mut ops = parse(&data).ops;
     let original = ops.get(img.op).cloned().ok_or_else(|| EditError::Invalid("the image operation is missing".into()))?;
     let mut resources = None;
+    let mut clip_move = None;
     let replacement: Vec<Op> = match change {
         ImageChange::Delete => Vec::new(),
         ImageChange::Transform(t) => {
@@ -271,7 +300,17 @@ pub fn change_image(doc: &mut Document, page: usize, index: usize, change: &Imag
             if !m.0.iter().all(|v| v.is_finite()) {
                 return Err(EditError::Invalid("the image transform is too large".into()));
             }
-            vec![Op::new("q", vec![]), Op::new("cm", m.0.iter().map(|v| pdfcraft_content::num(*v)).collect()), original, Op::new("Q", vec![])]
+            // `q re W n cm Do Q` clips only this image: move the clip with it instead of leaving it behind.
+            if let Some((at, cm)) = exclusive_clip(&ops, img.op) {
+                if let Some(c) = clip_matrix(Matrix(img.draw_matrix), cm, Matrix(*t)).filter(|c| c.0.iter().all(|v| v.is_finite())) {
+                    clip_move = Some((at, Op::new("cm", c.0.iter().map(|v| pdfcraft_content::num(*v)).collect())));
+                    vec![original]
+                } else {
+                    return Err(EditError::Invalid("the image transform is too large".into()));
+                }
+            } else {
+                vec![Op::new("q", vec![]), Op::new("cm", m.0.iter().map(|v| pdfcraft_content::num(*v)).collect()), original, Op::new("Q", vec![])]
+            }
         }
         ImageChange::Replace(r) => {
             if img.is_form {
@@ -289,6 +328,9 @@ pub fn change_image(doc: &mut Document, page: usize, index: usize, change: &Imag
         }
     };
     ops.splice(img.op..=img.op, replacement);
+    if let Some((at, cm)) = clip_move {
+        ops.insert(at, cm);
+    }
     let mut dict = match &*doc.resolve(&obj) {
         Object::Stream(s) => s.dict.clone(),
         _ => Dict::new(),
@@ -339,7 +381,7 @@ pub(crate) fn translate_images(doc: &mut Document, page: usize, indexes: &[usize
         if !movement.0.iter().all(|v| v.is_finite() && v.abs() <= 1e12) {
             return Err(EditError::Invalid("the image move is too large".into()));
         }
-        plans.insert((image.stream, image.op), movement);
+        plans.insert((image.stream, image.op), (movement, placement, offset));
     }
     let mut data = Vec::with_capacity(all.len());
     let mut inside_text = false;
@@ -355,8 +397,23 @@ pub(crate) fn translate_images(doc: &mut Document, page: usize, indexes: &[usize
                 return Err(EditError::Invalid("an image inside a text object cannot be moved in a group".into()));
             }
         }
+        // Images alone in their own `q re W n cm Do Q` take the clip with them.
+        let mut clips = std::collections::BTreeMap::new();
+        for index in 0..ops.len() {
+            let Some(&(_, placement, offset)) = plans.get(&(stream, index)) else { continue };
+            let Some((at, cm)) = exclusive_clip(&ops, index) else { continue };
+            let translation = Matrix([1.0, 0.0, 0.0, 1.0, offset[0], offset[1]]);
+            let Some(c) = clip_matrix(placement, cm, translation).filter(|c| c.0.iter().all(|v| v.is_finite() && v.abs() <= 1e12)) else {
+                return Err(EditError::Invalid("the image move is too large".into()));
+            };
+            plans.remove(&(stream, index));
+            clips.insert((stream, at), c);
+        }
         let changed = crate::text::splice(&pieces, &ops, |index| {
-            let Some(matrix) = plans.remove(&(stream, index)) else { return (Vec::new(), true) };
+            if let Some(c) = clips.remove(&(stream, index)) {
+                return (vec![Op::new("cm", c.0.map(Object::Real).to_vec())], true);
+            }
+            let Some((matrix, _, _)) = plans.remove(&(stream, index)) else { return (Vec::new(), true) };
             let original = ops.get(index).cloned().into_iter();
             // Local translations can be tiny under a large CTM. Preserve their precision
             // rather than rounding them to zero or amplifying an error on the page.

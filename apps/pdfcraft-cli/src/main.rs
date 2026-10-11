@@ -156,15 +156,29 @@ struct OptionSpec {
     takes_value: bool,
 }
 
-/// Refuse a long option `command` doesn't take (a misspelling) before any file is read.
+/// Refuse unknown options and malformed confinement flags before any file is read.
 fn validate_options(command: &str, args: &[String], specs: &[OptionSpec]) -> Result<(), CliError> {
+    if specs.iter().any(|spec| spec.name == "--root") {
+        // `flag` searches every token, including another option's value. Match that lookup so
+        // a malformed confinement flag cannot be hidden there and fall back to no root.
+        let mut root_seen = false;
+        for (i, _) in args.iter().enumerate().filter(|(_, arg)| arg.as_str() == "--root") {
+            if root_seen {
+                return Err(format!("{command}: --root may only be supplied once").into());
+            }
+            root_seen = true;
+            if args.get(i + 1).is_none_or(|value| value.is_empty() || value.starts_with("--")) {
+                return Err(format!("{command}: --root needs a directory value").into());
+            }
+        }
+    }
     let mut i = 0;
     while let Some(arg) = args.get(i) {
         if let Some(name) = arg.strip_prefix("--") {
             let Some(spec) = specs.iter().find(|spec| spec.name == arg) else {
                 return Err(format!("{command}: unknown option --{name}").into());
             };
-            // A missing or malformed value is left to the command, which reports it in its own
+            // Other missing or malformed values are left to the command, which reports them in its own
             // terms (`text` and `extract` explain what a page value must be).
             i += if spec.takes_value { 2 } else { 1 };
         } else {

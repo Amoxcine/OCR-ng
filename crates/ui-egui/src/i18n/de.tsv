@@ -88,7 +88,7 @@
 	Convert	Konvertieren
 	E-Sign	E-Signatur
 	Print ({key})	Drucken ({key})
-	Save (M4)	Speichern (M4)
+	Save ({key})	Speichern ({key})
 	Document properties ({key})	Dokumenteigenschaften ({key})
 	Find tools and commands	Tools und Befehle suchen
 	Fit to height	Seitenhöhe
@@ -758,6 +758,7 @@
 	Rotation	Drehung
 	Appear behind page	Hinter der Seite anzeigen
 	Appear on top of page	Vor der Seite anzeigen
+	Offset from centre	Abstand von der Mitte
 	From colour	Aus Farbe
 	Page Range Options	Optionen für Seitenbereich
 	Preview: page {p} of {n}	Vorschau: Seite {p} von {n}
@@ -1989,18 +1990,22 @@
 	Add folder and subfolders…	Ordner mit Unterordnern hinzufügen…
 	Add folder…	Ordner hinzufügen…
 	Add open documents	Geöffnete Dokumente hinzufügen
-	Add the PDFs to combine	Füge die zu kombinierenden PDFs hinzu
+	Add the files to combine	Füge die zu kombinierenden Dateien hinzu
 	Added more than once	Mehrfach hinzugefügt
 	All open documents	Alle geöffneten Dokumente
 	Can't be read: {e}	Kann nicht gelesen werden: {e}
+	Leave out files that can't be read?	Dateien auslassen, die nicht gelesen werden können?
+	These files can't be read, so they won't be in the combined PDF:	Diese Dateien können nicht gelesen werden und sind deshalb nicht im kombinierten PDF:
+	Combine the rest	Die übrigen kombinieren
+	and {n} more	und {n} weitere
 	Check the pages of {name}: {why}	Prüfe die Seiten von {name}: {why}
 	Click to sort, drag to move the column. Drag its edge to resize it.	Klicke zum Sortieren, ziehe zum Verschieben der Spalte. Ziehe ihren Rand, um die Breite zu ändern.
 	Drag to reorder	Ziehen zum Umsortieren
-	Drop PDFs or folders here, or choose them.	Lege PDFs oder Ordner hier ab oder wähle sie aus.
+	Drop PDFs, images, text files or folders here, or choose them.	Lege PDFs, Bilder, Textdateien oder Ordner hier ab oder wähle sie aus.
 	Enter the password that opens it	Gib das Passwort zum Öffnen ein
 	Enter the permissions password to allow combining	Gib das Berechtigungspasswort ein, um das Kombinieren zu erlauben
-	Every PDF in the folder	Jedes PDF im Ordner
-	Every PDF in the folder and the folders inside it	Jedes PDF im Ordner und in seinen Unterordnern
+	Every PDF, image and text file in the folder	Jedes PDF, jedes Bild und jede Textdatei im Ordner
+	Every PDF, image and text file in the folder and the folders inside it	Jedes PDF, jedes Bild und jede Textdatei im Ordner und in seinen Unterordnern
 	File name	Dateiname
 	Files are combined from top to bottom. Leave Pages empty to take every page.	Dateien werden von oben nach unten kombiniert. Lass „Seiten“ leer, um alle Seiten zu übernehmen.
 	Hide password	Passwort ausblenden
@@ -2064,8 +2069,8 @@
 	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	Fahre nur fort, wenn du diesem Dokument vertraust. Eine Adresse kann Informationen aus dem Dokument übermitteln, etwa was du in sein Formular eingegeben hast.
 	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	Einseitig drucken. Halte die Blätter in Reihenfolge, schneide an den Marken und lege die Stapel dann von links nach rechts, von oben nach unten aufeinander.
 	Unlocked {n} of {m} files	{n} von {m} Dateien entsperrt
-	No PDFs found in {folder}	Keine PDFs in {folder} gefunden
-	Added the first {n} PDFs in {folder}	Die ersten {n} PDFs aus {folder} hinzugefügt
+	No PDFs, images or text files found in {folder}	Keine PDFs, Bilder oder Textdateien in {folder} gefunden
+	Added the first {n} files in {folder}	Die ersten {n} Dateien aus {folder} hinzugefügt
 comment menu	Edit	Bearbeiten
 	Undo {action}	{action} rückgängig machen
 	Redo {action}	{action} wiederholen
@@ -2226,3 +2231,6 @@ key	Space	Leertaste
 	Type the corrected text; the preview shows the real result.	Geben Sie den korrigierten Text ein; die Vorschau zeigt das echte Ergebnis.
 	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Verwenden Sie Buchstaben, die anderswo auf der Seite vorkommen; Buchstaben mit Akzent lassen sich zusammensetzen, wenn der Akzent irgendwo auf der Seite steht.
 	rewritten without loss	verlustfrei neu geschrieben
+	Enhance camera image	Kamerafoto verbessern
+	Drag the corners onto the document's edges, then choose Enhance page.	Ziehen Sie die Ecken auf die Kanten des Dokuments und wählen Sie dann Seite verbessern.
+	Enhance page	Seite verbessern

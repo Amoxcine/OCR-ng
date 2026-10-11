@@ -477,6 +477,7 @@
 	Rotation	旋转
 	Appear behind page	显示在页面后面
 	Appear on top of page	显示在页面上层
+	Offset from centre	与中心的偏移
 	From colour	使用颜色
 	Page Range Options	页面范围选项
 	Preview: page {p} of {n}	预览：第 {p} 页，共 {n} 页
@@ -1097,7 +1098,7 @@
 	Dark gray theme	深灰色主题
 	Light theme	浅色主题
 	Print ({key})	打印 ({key})
-	Save (M4)	保存 (M4)
+	Save ({key})	保存 ({key})
 	Document properties ({key})	文档属性 ({key})
 	Action Wizard…	操作向导…
 	Add Bates numbering…	添加贝茨编号…
@@ -1553,16 +1554,16 @@
 	Opened, but its security settings don't allow combining. Enter the permissions password.	已打开，但其安全设置不允许合并。请输入权限密码。
 	Unlocked: the combined file won't be password-protected	已解锁：合并后的文件将不受密码保护
 	Unlocked {n} of {m} files	已解锁 {m} 个文件中的 {n} 个
-	Drop PDFs or folders here, or choose them.	将 PDF 或文件夹拖放到此处，或选择它们。
+	Drop PDFs, images, text files or folders here, or choose them.	将 PDF、图像、文本文件或文件夹拖放到此处，或选择它们。
 	Add folder…	添加文件夹…
 	Add folder and subfolders…	添加文件夹及子文件夹…
 	More ways to add files	更多添加文件的方式
-	Every PDF in the folder	文件夹中的所有 PDF
-	Every PDF in the folder and the folders inside it	文件夹及其子文件夹中的所有 PDF
+	Every PDF, image and text file in the folder	文件夹中的所有 PDF、图像和文本文件
+	Every PDF, image and text file in the folder and the folders inside it	文件夹及其子文件夹中的所有 PDF、图像和文本文件
 	Add folder	添加文件夹
 	Add folder and subfolders	添加文件夹及子文件夹
-	No PDFs found in {folder}	在 {folder} 中未找到 PDF
-	Added the first {n} PDFs in {folder}	已添加 {folder} 中的前 {n} 个 PDF
+	No PDFs, images or text files found in {folder}	在 {folder} 中未找到 PDF、图像或文本文件
+	Added the first {n} files in {folder}	已添加 {folder} 中的前 {n} 个文件
 	Click to sort, drag to move the column. Drag its edge to resize it.	单击以排序，拖动以移动列。拖动列边缘可调整宽度。
 	Reset columns	重置列
 	Remove {n} files	删除 {n} 个文件
@@ -1580,7 +1581,7 @@
 	{n} files need attention	{n} 个文件需要处理
 	{name} can't be combined: {why}	无法合并 {name}：{why}
 	Check the pages of {name}: {why}	请检查 {name} 的页码：{why}
-	Add the PDFs to combine	添加要合并的 PDF
+	Add the files to combine	添加要合并的文件
 	File name	文件名
 	Warnings	警告
 	Drag to reorder	拖动以重新排序
@@ -1593,6 +1594,10 @@
 	Password-protected	受密码保护
 	Its security settings don't allow copying pages	其安全设置不允许复制页面
 	Can't be read: {e}	无法读取：{e}
+	Leave out files that can't be read?	要排除无法读取的文件吗？
+	These files can't be read, so they won't be in the combined PDF:	这些文件无法读取，因此不会包含在合并后的 PDF 中：
+	Combine the rest	合并其余文件
+	and {n} more	以及另外 {n} 个
 	Includes unsaved changes	包含未保存的更改
 	Pages of {name} to combine, e.g. 1-3, 6	要合并的{name}的页面，例如 1-3、6
 	Remove {name}	删除{name}
@@ -2190,3 +2195,6 @@ key	Space	空格
 	Type the corrected text; the preview shows the real result.	输入更正后的文本;预览显示真实结果。
 	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	请使用页面其他地方出现的字母;如果重音符号出现在页面某处,就可以合成带重音的字母。
 	rewritten without loss	已无损重写
+	Enhance camera image	增强相机图像
+	Drag the corners onto the document's edges, then choose Enhance page.	将四个角拖到文档边缘，然后选择“增强页面”。
+	Enhance page	增强页面

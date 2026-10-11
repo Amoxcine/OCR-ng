@@ -116,7 +116,7 @@
 	Convert	تحويل
 	E-Sign	توقيع إلكتروني
 	Print ({key})	طباعة ({key})
-	Save (M4)	حفظ (M4)
+	Save ({key})	حفظ ({key})
 	Document properties ({key})	خصائص المستند ({key})
 	Find tools and commands	البحث عن الأدوات والأوامر
 	Fit to height	ملاءمة الارتفاع
@@ -785,6 +785,7 @@
 	Rotation	التدوير
 	Appear behind page	الظهور خلف الصفحة
 	Appear on top of page	الظهور فوق الصفحة
+	Offset from centre	الإزاحة عن المركز
 	From colour	من لون
 	Page Range Options	خيارات نطاق الصفحات
 	Preview: page {p} of {n}	معاينة: صفحة {p} من {n}
@@ -1585,16 +1586,16 @@
 	Opened, but its security settings don't allow combining. Enter the permissions password.	فُتح، لكن إعدادات أمانه لا تسمح بالدمج. أدخل كلمة مرور الأذونات.
 	Unlocked: the combined file won't be password-protected	أُلغي القفل: الملف المدموج لن يكون محميًا بكلمة مرور
 	Unlocked {n} of {m} files	أُلغي قفل {n} من {m} ملفات
-	Drop PDFs or folders here, or choose them.	أفلت ملفات PDF أو مجلدات هنا، أو اخترها.
+	Drop PDFs, images, text files or folders here, or choose them.	أفلت ملفات PDF أو الصور أو الملفات النصية أو المجلدات هنا، أو اخترها.
 	Add folder…	إضافة مجلد…
 	Add folder and subfolders…	إضافة مجلد ومجلداته الفرعية…
 	More ways to add files	طرق أخرى لإضافة الملفات
-	Every PDF in the folder	كل ملفات PDF في المجلد
-	Every PDF in the folder and the folders inside it	كل ملفات PDF في المجلد والمجلدات التي بداخله
+	Every PDF, image and text file in the folder	كل ملفات PDF والصور والملفات النصية في المجلد
+	Every PDF, image and text file in the folder and the folders inside it	كل ملفات PDF والصور والملفات النصية في المجلد والمجلدات التي بداخله
 	Add folder	إضافة مجلد
 	Add folder and subfolders	إضافة مجلد ومجلداته الفرعية
-	No PDFs found in {folder}	لم يُعثر على ملفات PDF في {folder}
-	Added the first {n} PDFs in {folder}	أُضيفت أول {n} ملفات PDF في {folder}
+	No PDFs, images or text files found in {folder}	لم يُعثر على ملفات PDF أو صور أو ملفات نصية في {folder}
+	Added the first {n} files in {folder}	أُضيفت أول {n} ملفات في {folder}
 	Click to sort, drag to move the column. Drag its edge to resize it.	انقر للفرز، واسحب لنقل العمود. اسحب حافته لتغيير حجمه.
 	Reset columns	إعادة ضبط الأعمدة
 	Remove {n} files	إزالة {n} ملفات
@@ -1612,7 +1613,7 @@
 	{n} files need attention	{n} ملفات تحتاج إلى انتباه
 	{name} can't be combined: {why}	لا يمكن دمج {name}: {why}
 	Check the pages of {name}: {why}	تحقق من صفحات {name}: {why}
-	Add the PDFs to combine	أضف ملفات PDF المراد دمجها
+	Add the files to combine	أضف الملفات المراد دمجها
 	File name	اسم الملف
 	Warnings	التحذيرات
 	Drag to reorder	اسحب لإعادة الترتيب
@@ -1625,6 +1626,10 @@
 	Password-protected	محمي بكلمة مرور
 	Its security settings don't allow copying pages	إعدادات أمانه لا تسمح بنسخ الصفحات
 	Can't be read: {e}	تتعذر قراءته: {e}
+	Leave out files that can't be read?	هل تريد استبعاد الملفات التي تتعذر قراءتها؟
+	These files can't be read, so they won't be in the combined PDF:	تتعذر قراءة هذه الملفات، لذا لن تكون في ملف PDF المدمج:
+	Combine the rest	دمج الباقي
+	and {n} more	و{n} أخرى
 	Includes unsaved changes	يتضمن تغييرات غير محفوظة
 	Pages of {name} to combine, e.g. 1-3, 6	صفحات {name} المراد دمجها، مثلًا 1-3, 6
 	Remove {name}	إزالة {name}
@@ -2246,3 +2251,6 @@ key	Space	مسافة
 	Type the corrected text; the preview shows the real result.	اكتب النص المصحّح؛ تعرض المعاينة النتيجة الفعلية.
 	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	استخدم حروفًا موجودة في مكان آخر من الصفحة؛ يمكن تركيب الحروف المشكولة إذا ظهرت العلامة في مكان ما من الصفحة.
 	rewritten without loss	أُعيدت كتابته دون فقد
+	Enhance camera image	تحسين صورة الكاميرا
+	Drag the corners onto the document's edges, then choose Enhance page.	اسحب الزوايا إلى حواف المستند، ثم اختر تحسين الصفحة.
+	Enhance page	تحسين الصفحة

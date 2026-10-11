@@ -2442,8 +2442,8 @@ milestone = "M7"
 status = "partial"
 commands = ["edit.watermark"]
 tools = ["doc_watermark"]
-evidence = ["crates/edit/src/tests.rs::watermarks_rotate_fade_and_can_go_behind"]
-notes = "rotation, opacity, behind/on top; no position offsets, scale or print/screen-only variants in the UI yet"
+evidence = ["crates/edit/src/tests.rs::watermarks_rotate_fade_and_can_go_behind", "crates/edit/src/tests.rs::watermark_offset_moves_the_centre_right_and_up", "crates/edit/src/tests.rs::a_watermark_offset_that_is_not_finite_is_refused", "crates/automation/tests/automation.rs::watermarks_move_from_the_page_centre_through_tools", "crates/ui-egui/src/marks_ui.rs::the_watermark_edit_carries_the_offset"]
+notes = "rotation, opacity, behind/on top, and a horizontal/vertical offset from the page centre in points (dialog and offset_x/offset_y); no offset from the page edge or in page units, and no print/screen-only variants yet"
 
 [[feature]]
 id = "edit.background-add"
@@ -2926,8 +2926,8 @@ milestone = "M4"
 status = "shipped"
 commands = ["page.combine"]
 tools = ["doc_combine"]
-evidence = ["crates/organize/src/tests.rs::combine_concatenates_with_a_bookmark_per_file", "crates/ui-egui/tests/editing.rs::combining_files_opens_a_new_unsaved_tab", "crates/ui-egui/tests/editing.rs::combine_files_opens_in_its_own_tab", "crates/ui-egui/tests/editing.rs::combine_lists_size_and_warns_before_combining", "crates/ui-egui/tests/editing.rs::a_password_protected_file_is_unlocked_with_its_password_and_combined", "crates/ui-egui/tests/editing.rs::a_folder_adds_its_pdfs_in_order_and_optionally_its_subfolders", "crates/ui-egui/tests/ui.rs::pdfs_dropped_on_the_combine_tab_join_its_list", "crates/automation/tests/automation.rs::combine_extract_and_split", "crates/automation/tests/automation.rs::combine_opens_protected_files_with_their_passwords", "crates/organize/src/tests.rs::combine_keeps_pdfx_when_every_source_agrees", "crates/organize/src/tests.rs::combine_claims_no_pdfx_when_the_sources_disagree"]
-notes = "Combine files is its own tab: a table of the files (name, pages, size, modified, warnings) with column sorting, resizing and moving; files, folders (with subfolders) and open documents can be added, or dropped on the tab. Problems show before Combine (password, security settings that withhold page assembly, bad page ranges, duplicates); protected files are unlocked with their open or permissions password (also doc_combine passwords). The result is never encrypted, and is not yet offered for protection in the same step. A PDF/X result (output intent, GTS_PDFXVersion, Trapped, XMP pdfxid) only when every source declares the same version and output intent (#263). When they differ the result claims none, and nothing reports that yet; Acrobat behaviour not observed."
+evidence = ["crates/organize/src/tests.rs::combine_concatenates_with_a_bookmark_per_file", "crates/ui-egui/tests/editing.rs::combining_files_opens_a_new_unsaved_tab", "crates/ui-egui/tests/editing.rs::combine_files_opens_in_its_own_tab", "crates/ui-egui/tests/editing.rs::combine_lists_size_and_warns_before_combining", "crates/ui-egui/tests/editing.rs::a_password_protected_file_is_unlocked_with_its_password_and_combined", "crates/ui-egui/tests/editing.rs::a_folder_adds_its_pdfs_images_and_text_in_order_and_optionally_its_subfolders", "crates/ui-egui/tests/editing.rs::images_and_text_files_join_the_combine_list_as_pdfs", "crates/ui-egui/tests/editing.rs::files_that_cannot_be_read_are_listed_and_left_out_once_the_user_agrees", "crates/ui-egui/tests/ui.rs::pdfs_dropped_on_the_combine_tab_join_its_list", "crates/automation/tests/automation.rs::combine_extract_and_split", "crates/automation/tests/automation.rs::combine_opens_protected_files_with_their_passwords", "crates/automation/tests/automation.rs::combine_takes_images_and_text_files", "crates/engine/src/tests.rs::files_for_combine_are_made_into_pdfs_and_pdfs_pass_through", "crates/organize/src/tests.rs::combine_keeps_pdfx_when_every_source_agrees", "crates/organize/src/tests.rs::combine_claims_no_pdfx_when_the_sources_disagree"]
+notes = "Combine files is its own tab: a table of the files (name, pages, size, modified, warnings) with column sorting, resizing and moving; files, folders (with subfolders) and open documents can be added, or dropped on the tab. Images (PNG, JPEG, TIFF, GIF, BMP, JPEG 2000) and .txt files become PDFs as they are added (#569; also in doc_combine). A file that can't be read stays in the list with why, and Combine asks before leaving it out; Office documents, HTML and other formats are not converted yet. Problems show before Combine (password, security settings that withhold page assembly, bad page ranges, duplicates); protected files are unlocked with their open or permissions password (also doc_combine passwords). The result is never encrypted, and is not yet offered for protection in the same step. A PDF/X result (output intent, GTS_PDFXVersion, Trapped, XMP pdfxid) only when every source declares the same version and output intent (#263). When they differ the result claims none, and nothing reports that yet; Acrobat behaviour not observed."
 
 [[feature]]
 id = "organize.combine-bookmarks"
@@ -6603,11 +6603,11 @@ title = "Enhance camera images (edges, perspective, contrast)"
 area = "I"
 tier = "P1"
 milestone = "M10"
-status = "planned"
-commands = []
-tools = []
-evidence = []
-notes = ""
+status = "partial"
+commands = ["ocr.enhance_camera"]
+tools = ["page_enhance_camera"]
+evidence = ["crates/engine/src/tests.rs::enhance_camera_page_straightens_the_sheet", "crates/automation/tests/automation.rs::enhance_camera_image_through_tools", "crates/ui-egui/tests/camera.rs::dragging_a_corner_then_enhance_page_straightens_the_page", "crates/ui-egui/tests/camera.rs::after_enhance_page_crop_and_organize_take_over", "crates/engine/src/tests.rs::detect_camera_corners_finds_the_sheet_in_user_space", "crates/automation/tests/automation.rs::enhance_camera_image_finds_the_edges_by_itself"]
+notes = "Four corners (any order, a convex quadrilateral) are warped to an upright page at the picture's own resolution, in one undoable step; comments, links and bookmarks stay. Scan & OCR ▸ Enhance camera image shows four corner handles on the current page (Enhance page / Cancel / Esc), then offers rotate either way, Crop pages and Organize pages for the enhanced page; page_enhance_camera does the same headlessly. The corners start on the document's edges when they are found (straight lines with an edge along most of each side, refined by a line fit; tested on synthetic photos with text, wood grain, shadows, strong perspective and a 30° turn), else inset 5%. Missing: turning the result upright (text orientation), rounded-corner cards keep their background in the corners, contrast and background cleanup, document types."
 
 [[feature]]
 id = "ocr.camera-document-type"

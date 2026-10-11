@@ -198,6 +198,25 @@ fn a_tiff_claiming_enormous_dimensions_is_refused() {
     assert!(matches!(from_images(&[("huge.tif".into(), tif)]), Err(CreateError::Image(..))));
 }
 
+/// Likewise a PNG: the png crate's limits don't cover the frame buffer, which its header sizes
+/// (60000x60000 RGBA is 14.4 GB). Refused before anything is allocated, not after.
+#[test]
+fn a_png_claiming_enormous_dimensions_is_refused() {
+    let mut png = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut png, 60_000, 60_000);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut w = enc.write_header().unwrap();
+        // A zlib stream holding one zero byte: far too little data, but a well-formed start.
+        w.write_chunk(png::chunk::IDAT, &[0x78, 0x01, 0x01, 0x01, 0x00, 0xFE, 0xFF, 0x00, 0x00, 0x01, 0x00, 0x01]).unwrap();
+    }
+    match from_images(&[("huge.png".into(), png)]) {
+        Err(CreateError::Image(_, m)) => assert!(m.contains("too large"), "{m}"),
+        other => panic!("expected a refusal, got {:?}", other.map(|_| ())),
+    }
+}
+
 #[test]
 fn images_export_as_jpeg_unchanged_and_others_as_png() {
     let doc = reopen(

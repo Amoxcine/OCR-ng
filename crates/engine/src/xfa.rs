@@ -452,9 +452,7 @@ impl<'a, 'b> Runner<'a, 'b> {
         self.flush()?;
         let report = pdfcraft_xfa::rerender(self.doc, self.tpl).map_err(|e| e.to_string())?;
         self.console(report.warnings);
-        for f in pdfcraft_forms::fields(self.doc) {
-            pdfcraft_forms::redraw_field(self.doc, &f.name).map_err(|e| format!("{}: {e}", f.name))?;
-        }
+        crate::xfa_redraw(self.doc)?;
         self.by_som = None;
         self.fields = None;
         self.cached = None;

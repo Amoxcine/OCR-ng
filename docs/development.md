@@ -58,7 +58,11 @@ panic, as upstream: an error in a later reconfigure (resizing, a lost surface); 
 during that first configure (wgpu reports it only to a callback, so the first frame panics, after
 the app has started); and a window shown at zero size, which is first configured on resize. If
 OpenGL can't start either, PdfCraft exits with both errors in the log. The fallback is logged at
-`error`, with the wgpu error. `PDFCRAFT_RENDERER` skips it or chooses OpenGL from the start.
+`error`, with the wgpu error. Renderer resource creation now uses the same scopes and returns
+`WgpuError::CreateRenderer` before the app is created, so a rejected `egui_pipeline` can also
+reach this retry instead of the uncaptured-error panic handler. This does not fix the failing
+driver's shader compilation, and explicit `PDFCRAFT_RENDERER=wgpu` still disables the retry.
+`PDFCRAFT_RENDERER` skips it or chooses OpenGL from the start.
 
 ## Environment variables
 
@@ -67,7 +71,7 @@ OpenGL can't start either, PdfCraft exits with both errors in the log. The fallb
 | `RUST_LOG` | Log levels for standard error and the log file (see [Logs](#logs)) |
 | `RUST_BACKTRACE` | `1` adds a backtrace to the report of an internal error |
 | `XDG_DATA_HOME` | Linux/FreeBSD: base of the settings folder (`pdfcraft/`), the log folder and crash recovery |
-| `WGPU_POWER_PREF` | GPU choice; by default PdfCraft draws on the GPU that drives the primary display (Windows) or the built-in panel (Linux), else the low-power (integrated) GPU. The log says which one was chosen |
+| `WGPU_POWER_PREF` | GPU choice; by default PdfCraft draws on the GPU the Wayland compositor draws with (it says so through linux-dmabuf feedback), else the GPU that drives the primary display (Windows) or the built-in panel (Linux), else the low-power (integrated) GPU. The log says which one was chosen |
 | `WGPU_BACKEND` | Graphics backend; by default Windows uses Direct3D 12, falling back to OpenGL |
 | `PDFCRAFT_RENDERER` | `gl` starts with OpenGL (glow) and never loads wgpu; `wgpu` reports a wgpu failure instead of retrying with OpenGL; unset, wgpu is retried with OpenGL when it can't start (see [Renderer fallback](#renderer-fallback)) |
 | `CRAFT_FONTS_DIR` | Build time: a [craft-fonts](https://github.com/storytold/craft-fonts) checkout to embed (Japanese fonts) |

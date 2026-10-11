@@ -88,7 +88,7 @@
 	Convert	Convertir
 	E-Sign	Signature électronique
 	Print ({key})	Imprimer ({key})
-	Save (M4)	Enregistrer (M4)
+	Save ({key})	Enregistrer ({key})
 	Document properties ({key})	Propriétés du document ({key})
 	Find tools and commands	Rechercher des outils et des commandes
 	Fit to height	Ajuster à la hauteur
@@ -758,6 +758,7 @@
 	Rotation	Rotation
 	Appear behind page	Afficher derrière la page
 	Appear on top of page	Afficher au-dessus de la page
+	Offset from centre	Décalage par rapport au centre
 	From colour	À partir d'une couleur
 	Page Range Options	Options d'intervalle de pages
 	Preview: page {p} of {n}	Aperçu : page {p} sur {n}
@@ -1991,18 +1992,22 @@
 	Add folder and subfolders…	Ajouter un dossier et ses sous-dossiers…
 	Add folder…	Ajouter un dossier…
 	Add open documents	Ajouter des documents ouverts
-	Add the PDFs to combine	Ajoutez les PDF à combiner
+	Add the files to combine	Ajoutez les fichiers à combiner
 	Added more than once	Ajouté plusieurs fois
 	All open documents	Tous les documents ouverts
 	Can't be read: {e}	Illisible : {e}
+	Leave out files that can't be read?	Laisser de côté les fichiers illisibles ?
+	These files can't be read, so they won't be in the combined PDF:	Ces fichiers sont illisibles ; ils ne figureront pas dans le PDF combiné :
+	Combine the rest	Combiner les autres
+	and {n} more	et {n} de plus
 	Check the pages of {name}: {why}	Vérifiez les pages de {name} : {why}
 	Click to sort, drag to move the column. Drag its edge to resize it.	Cliquer pour trier, faire glisser pour déplacer la colonne. Faire glisser son bord pour la redimensionner.
 	Drag to reorder	Faire glisser pour réordonner
-	Drop PDFs or folders here, or choose them.	Déposez ici des PDF ou des dossiers, ou choisissez-les.
+	Drop PDFs, images, text files or folders here, or choose them.	Déposez ici des PDF, des images, des fichiers texte ou des dossiers, ou choisissez-les.
 	Enter the password that opens it	Saisissez le mot de passe qui l'ouvre
 	Enter the permissions password to allow combining	Saisissez le mot de passe des autorisations pour permettre de le combiner
-	Every PDF in the folder	Tous les PDF du dossier
-	Every PDF in the folder and the folders inside it	Tous les PDF du dossier et des dossiers qu'il contient
+	Every PDF, image and text file in the folder	Tous les PDF, images et fichiers texte du dossier
+	Every PDF, image and text file in the folder and the folders inside it	Tous les PDF, images et fichiers texte du dossier et des dossiers qu'il contient
 	File name	Nom du fichier
 	Files are combined from top to bottom. Leave Pages empty to take every page.	Les fichiers sont combinés de haut en bas. Laissez Pages vide pour prendre toutes les pages.
 	Hide password	Masquer le mot de passe
@@ -2085,7 +2090,7 @@
 	A script	Un script
 	About	À propos
 	Add {what}	Ajouter {what}
-	Added the first {n} PDFs in {folder}	Les {n} premiers PDF de {folder} ont été ajoutés
+	Added the first {n} files in {folder}	Les {n} premiers fichiers de {folder} ont été ajoutés
 	Align fields	Aligner les champs
 	Another file dialog is still open. Finish with it first.	Une autre boîte de dialogue de fichier est encore ouverte. Terminez d'abord avec celle-ci.
 	Basic constraints	Contraintes de base
@@ -2101,7 +2106,7 @@
 	Mark pages for redaction	Marquer des pages pour biffure
 	Match field sizes	Uniformiser la taille des champs
 	Models	Modèles
-	No PDFs found in {folder}	Aucun PDF trouvé dans {folder}
+	No PDFs, images or text files found in {folder}	Aucun PDF, image ou fichier texte trouvé dans {folder}
 	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	Ne continuez que si vous faites confiance à ce document. Une adresse peut transmettre des informations du document, par exemple ce que vous avez saisi dans son formulaire.
 	Place saved {what}	Placer {what} (version enregistrée)
 	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	Imprimez en recto seul. Gardez les feuilles dans l'ordre, découpez aux repères, puis empilez les piles de gauche à droite et de haut en bas.
@@ -2226,3 +2231,6 @@ key	Space	Espace
 	Type the corrected text; the preview shows the real result.	Saisissez le texte corrigé ; l'aperçu montre le résultat réel.
 	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Utilisez des lettres présentes ailleurs sur la page ; une lettre accentuée peut être composée si l'accent figure quelque part sur la page.
 	rewritten without loss	réécrit sans perte
+	Enhance camera image	Améliorer la photo d'un document
+	Drag the corners onto the document's edges, then choose Enhance page.	Faites glisser les coins sur les bords du document, puis choisissez Améliorer la page.
+	Enhance page	Améliorer la page

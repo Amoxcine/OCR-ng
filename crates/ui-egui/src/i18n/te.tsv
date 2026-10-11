@@ -92,7 +92,7 @@ comment menu	Edit	సవరించు
 	Convert	మార్పిడి
 	E-Sign	ఇ-సంతకం
 	Print ({key})	ముద్రించు ({key})
-	Save (M4)	సేవ్ చేయి (M4)
+	Save ({key})	సేవ్ చేయి ({key})
 	Document properties ({key})	పత్ర లక్షణాలు ({key})
 	Find tools and commands	సాధనాలను, కమాండ్‌లను కనుగొను
 	Fit to height	ఎత్తుకు సరిపోయేలా
@@ -1987,16 +1987,16 @@ action wizard	Start	ప్రారంభించు
 	Opened, but its security settings don't allow combining. Enter the permissions password.	తెరవబడింది, కానీ దీని భద్రతా సెట్టింగ్‌లు కలపడాన్ని అనుమతించవు. అనుమతుల పాస్‌వర్డ్‌ను నమోదు చేయండి.
 	Unlocked: the combined file won't be password-protected	అన్‌లాక్ చేయబడింది: కలిపిన ఫైల్ పాస్‌వర్డ్‌తో రక్షించబడదు
 	Unlocked {n} of {m} files	{m} ఫైల్‌లలో అన్‌లాక్ చేయబడినవి: {n}
-	Drop PDFs or folders here, or choose them.	PDFలను లేదా ఫోల్డర్‌లను ఇక్కడ లాగి వదలండి, లేదా వాటిని ఎంచుకోండి.
+	Drop PDFs, images, text files or folders here, or choose them.	PDFలను, చిత్రాలను, టెక్స్ట్ ఫైల్‌లను లేదా ఫోల్డర్‌లను ఇక్కడ లాగి వదలండి, లేదా వాటిని ఎంచుకోండి.
 	Add folder…	ఫోల్డర్‌ను జోడించు…
 	Add folder and subfolders…	ఫోల్డర్‌ను, దాని ఉప ఫోల్డర్‌లను జోడించు…
 	More ways to add files	ఫైల్‌లను జోడించడానికి మరిన్ని మార్గాలు
-	Every PDF in the folder	ఫోల్డర్‌లోని ప్రతి PDF
-	Every PDF in the folder and the folders inside it	ఫోల్డర్‌లోని, దాని లోపలి ఫోల్డర్‌లలోని ప్రతి PDF
+	Every PDF, image and text file in the folder	ఫోల్డర్‌లోని ప్రతి PDF, చిత్రం, టెక్స్ట్ ఫైల్
+	Every PDF, image and text file in the folder and the folders inside it	ఫోల్డర్‌లోని, దాని లోపలి ఫోల్డర్‌లలోని ప్రతి PDF, చిత్రం, టెక్స్ట్ ఫైల్
 	Add folder	ఫోల్డర్‌ను జోడించు
 	Add folder and subfolders	ఫోల్డర్‌ను, దాని ఉప ఫోల్డర్‌లను జోడించు
-	No PDFs found in {folder}	{folder}లో PDFలు ఏవీ కనుగొనబడలేదు
-	Added the first {n} PDFs in {folder}	{folder}లోని మొదటి {n} PDFలు జోడించబడ్డాయి
+	No PDFs, images or text files found in {folder}	{folder}లో PDFలు, చిత్రాలు లేదా టెక్స్ట్ ఫైల్‌లు ఏవీ కనుగొనబడలేదు
+	Added the first {n} files in {folder}	{folder}లోని మొదటి {n} ఫైల్‌లు జోడించబడ్డాయి
 	Click to sort, drag to move the column. Drag its edge to resize it.	క్రమపరచడానికి క్లిక్ చేయండి, నిలువు వరుసను తరలించడానికి లాగండి. పరిమాణం మార్చడానికి దాని అంచును లాగండి.
 	Reset columns	నిలువు వరుసలను రీసెట్ చేయి
 	Remove {n} files	{n} ఫైల్‌లను తీసివేయి
@@ -2014,7 +2014,7 @@ action wizard	Start	ప్రారంభించు
 	{n} files need attention	{n} ఫైల్‌లలో సమస్యలు ఉన్నాయి
 	{name} can't be combined: {why}	{name}ను కలపడం సాధ్యం కాదు: {why}
 	Check the pages of {name}: {why}	{name} పేజీలను తనిఖీ చేయండి: {why}
-	Add the PDFs to combine	కలపాల్సిన PDFలను జోడించండి
+	Add the files to combine	కలపాల్సిన ఫైల్‌లను జోడించండి
 	File name	ఫైల్ పేరు
 	Warnings	హెచ్చరికలు
 	Drag to reorder	క్రమం మార్చడానికి లాగండి
@@ -2027,6 +2027,10 @@ action wizard	Start	ప్రారంభించు
 	Password-protected	పాస్‌వర్డ్‌తో రక్షించబడింది
 	Its security settings don't allow copying pages	దీని భద్రతా సెట్టింగ్‌లు పేజీలను కాపీ చేయడాన్ని అనుమతించవు
 	Can't be read: {e}	చదవడం సాధ్యం కాదు: {e}
+	Leave out files that can't be read?	చదవలేని ఫైల్‌లను వదిలేయాలా?
+	These files can't be read, so they won't be in the combined PDF:	ఈ ఫైల్‌లను చదవలేము, కాబట్టి అవి కలిపిన PDFలో ఉండవు:
+	Combine the rest	మిగిలినవి కలుపు
+	and {n} more	మరియు మరో {n}
 	Includes unsaved changes	సేవ్ చేయని మార్పులు ఉన్నాయి
 	This web address mixes letters from different alphabets, a common way to imitate another site's name.	ఈ వెబ్ చిరునామాలో వేర్వేరు లిపుల అక్షరాలు కలిసి ఉన్నాయి. వేరే సైట్ పేరును అనుకరించడానికి ఇది తరచూ వాడే పద్ధతి.
 	This web address uses letters from another alphabet, which can look like familiar ones.	ఈ వెబ్ చిరునామాలో వేరే లిపి అక్షరాలు ఉన్నాయి. అవి మీకు తెలిసిన అక్షరాల్లాగే కనిపించవచ్చు.
@@ -2156,3 +2160,6 @@ key	Space	స్పేస్
 	Type the corrected text; the preview shows the real result.	సరిదిద్దిన వచనాన్ని టైప్ చేయండి; ముందుచూపు నిజమైన ఫలితాన్ని చూపుతుంది.
 	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	పేజీలో ఇంకెక్కడైనా ఉన్న అక్షరాలను వాడండి; ఉచ్చారణ గుర్తు పేజీలో ఎక్కడైనా ఉంటే ఆ గుర్తు ఉన్న అక్షరాలను కూర్చవచ్చు.
 	rewritten without loss	నష్టం లేకుండా తిరిగి రాశాం
+	Enhance camera image	కెమెరా చిత్రాన్ని మెరుగుపరచు
+	Drag the corners onto the document's edges, then choose Enhance page.	మూలలను పత్రం అంచుల వరకు లాగి, ఆపై పేజీని మెరుగుపరచు ఎంచుకోండి.
+	Enhance page	పేజీని మెరుగుపరచు

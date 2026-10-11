@@ -213,6 +213,9 @@ pub struct CombineTab {
     pub(crate) selected_pages: BTreeSet<(u64, usize)>,
     /// The page a Shift-click selects from.
     pub(crate) page_anchor: Option<(u64, usize)>,
+    /// "Leave out files that can't be read?", asked when Combine is clicked with such files in the
+    /// list.
+    pub(crate) confirm_skip: bool,
 }
 
 /// The pages a range takes, and the range and page count they were worked out for.
@@ -393,6 +396,13 @@ impl CombineFile {
         self.auth = next_auth();
         self.notes = self.origin_note.iter().cloned().chain(a.notes).collect();
         self.checked = None;
+    }
+
+    /// Whether the file can't be read at all (damaged, or a type that can't be made into a PDF):
+    /// it stays in the list, with why, and Combine leaves it out once the user agrees. A
+    /// password-protected file can be unlocked instead, so it isn't one.
+    pub(crate) fn unreadable(&self) -> bool {
+        self.problem.is_some() && self.lock.is_none()
     }
 
     /// The password the file was unlocked with, if any.
@@ -583,7 +593,7 @@ pub(crate) fn page(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     // The keyboard is the list's unless a text field, the password box or the size slider has it.
     let slider_focused = grid && app.combine_tab.zoom_slider.is_some_and(|id| ui.memory(|m| m.has_focus(id)));
     // (Nor while a file is shown large: its window may only open or close this frame.)
-    let covered = app.combine_tab.unlock.is_some() || app.combine_tab.preview.is_some();
+    let covered = app.combine_tab.unlock.is_some() || app.combine_tab.preview.is_some() || app.combine_tab.confirm_skip;
     let focus = ui.memory(|m| m.focused());
     let space = focus.is_none() || focus == app.combine_tab.card_focus;
     let any_picked = count > 0 || !app.combine_tab.selected_pages.is_empty();
@@ -793,7 +803,67 @@ pub(crate) fn page(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         app.combine_apply(action);
     }
     if combine && blocker.is_none() {
-        app.combine_staged();
+        if app.combine_draft.iter().any(CombineFile::unreadable) {
+            app.combine_tab.confirm_skip = true;
+        } else {
+            app.combine_staged();
+        }
+    }
+    skip_prompt(app, ui.ctx());
+}
+
+/// Most files the prompt names; the rest are counted.
+const SKIP_PROMPT_NAMES: usize = 8;
+
+/// "Leave out files that can't be read?": names them and why, then combines the others, or not.
+fn skip_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
+    if !app.combine_tab.confirm_skip {
+        return;
+    }
+    let t = Tokens::get(ctx);
+    let mut left_out: Vec<(&str, &str)> = Vec::new();
+    let mut seen = BTreeSet::new();
+    for f in app.combine_draft.iter().filter(|f| f.unreadable() && seen.insert(f.group)) {
+        left_out.push((f.name.as_str(), f.problem.as_deref().unwrap_or_default()));
+    }
+    let mut choice: Option<bool> = None;
+    let modal = egui::Modal::new(egui::Id::new("combine-skip")).show(ctx, |ui| {
+        ui.set_width(460.0);
+        ui.horizontal(|ui| {
+            ui.add(icons::image("triangle-alert", 22.0, ERROR));
+            ui.add(egui::Label::new(egui::RichText::new(tl!("Leave out files that can't be read?")).font(theme::semibold(16.0))).wrap());
+        });
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new(tl!("These files can't be read, so they won't be in the combined PDF:")).color(t.text_muted));
+        ui.add_space(6.0);
+        for (name, why) in left_out.iter().take(SKIP_PROMPT_NAMES) {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new(format!("• {}", crate::bidi::visual(name))).strong());
+                ui.label(egui::RichText::new(*why).color(t.text_muted));
+            });
+        }
+        if left_out.len() > SKIP_PROMPT_NAMES {
+            let more = (left_out.len() - SKIP_PROMPT_NAMES).to_string();
+            ui.label(egui::RichText::new(crate::i18n::fmt(tl!("and {n} more"), &[("n", &more)])).color(t.text_muted));
+        }
+        ui.add_space(14.0);
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            if widgets::pill_button(ui, tl!("Combine the rest"), true).clicked() {
+                choice = Some(true);
+            }
+            if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
+                choice = Some(false);
+            }
+        });
+    });
+    if choice.is_none() && modal.should_close() {
+        choice = Some(false);
+    }
+    if let Some(go) = choice {
+        app.combine_tab.confirm_skip = false;
+        if go {
+            app.combine_staged();
+        }
     }
 }
 
@@ -907,11 +977,20 @@ fn expandable(f: &mut CombineFile) -> bool {
 
 /// Why Combine can't run yet, if so.
 fn blocker(files: &[CombineFile], checks: &[Result<usize, String>]) -> Option<String> {
-    // (A file split into parts is still one file.)
-    if files.iter().map(|f| f.group).collect::<BTreeSet<u64>>().len() < 2 {
-        return Some(tl!("Add at least two files").to_string());
+    // (A file split into parts is still one file.) Files that can't be read are left out, so
+    // they don't count.
+    if files.iter().filter(|f| !f.unreadable()).map(|f| f.group).collect::<BTreeSet<u64>>().len() < 2 {
+        return Some(match files.iter().find(|f| f.unreadable()) {
+            Some(f) => {
+                crate::i18n::fmt(tl!("{name} can't be combined: {why}"), &[("name", &f.name), ("why", f.problem.as_deref().unwrap_or_default())])
+            }
+            None => tl!("Add at least two files").to_string(),
+        });
     }
     for (f, check) in files.iter().zip(checks) {
+        if f.unreadable() {
+            continue;
+        }
         if let Some(p) = &f.problem {
             return Some(crate::i18n::fmt(tl!("{name} can't be combined: {why}"), &[("name", &f.name), ("why", p)]));
         }
@@ -1041,9 +1120,9 @@ fn empty_state(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, files_hover
         ui.add_space((ui.available_height() / 2.0 - 70.0).max(16.0));
         ui.add(icons::image("files", 40.0, if files_hovering { t.accent } else { t.text_faint }));
         ui.add_space(10.0);
-        ui.label(egui::RichText::new(tl!("Add the PDFs to combine")).font(theme::medium(15.0)));
+        ui.label(egui::RichText::new(tl!("Add the files to combine")).font(theme::medium(15.0)));
         ui.add_space(4.0);
-        ui.label(egui::RichText::new(tl!("Drop PDFs or folders here, or choose them.")).color(t.text_faint));
+        ui.label(egui::RichText::new(tl!("Drop PDFs, images, text files or folders here, or choose them.")).color(t.text_faint));
         ui.add_space(12.0);
         let folders = cfg!(not(target_arch = "wasm32"));
         // Centre the buttons: measure them first.
@@ -1084,12 +1163,12 @@ fn add_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             app.combine_dialog();
             ui.close();
         }
-        if item(ui, "folder", tl!("Add folder…")).on_hover_text(tl!("Every PDF in the folder")).clicked() {
+        if item(ui, "folder", tl!("Add folder…")).on_hover_text(tl!("Every PDF, image and text file in the folder")).clicked() {
             app.combine_add_folder(false);
             ui.close();
         }
         if item(ui, "folder-open", tl!("Add folder and subfolders…"))
-            .on_hover_text(tl!("Every PDF in the folder and the folders inside it"))
+            .on_hover_text(tl!("Every PDF, image and text file in the folder and the folders inside it"))
             .clicked()
         {
             app.combine_add_folder(true);
@@ -1406,10 +1485,10 @@ fn table_body(
         });
 }
 
-/// The PDFs in `dir` (and, if `recursive`, the folders inside it, not following links), in
-/// natural order, at most [`MAX_FOLDER_FILES`]; and whether there were more.
+/// The PDFs, images and text files in `dir` (and, if `recursive`, the folders inside it, not
+/// following links), in natural order, at most [`MAX_FOLDER_FILES`]; and whether there were more.
 #[cfg(not(target_arch = "wasm32"))]
-fn pdfs_in(dir: &std::path::Path, recursive: bool) -> (Vec<std::path::PathBuf>, bool) {
+fn combinable_in(dir: &std::path::Path, recursive: bool) -> (Vec<std::path::PathBuf>, bool) {
     let mut found = Vec::new();
     let mut more = false;
     let mut folders = vec![(dir.to_path_buf(), 0usize)];
@@ -1423,7 +1502,7 @@ fn pdfs_in(dir: &std::path::Path, recursive: bool) -> (Vec<std::path::PathBuf>, 
                 if recursive && !hidden && depth < MAX_FOLDER_DEPTH {
                     folders.push((path, depth + 1));
                 }
-            } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("pdf")) && path.is_file() {
+            } else if path.extension().is_some_and(|e| combinable(&e.to_string_lossy())) && path.is_file() {
                 if found.len() >= MAX_FOLDER_FILES {
                     more = true;
                     break 'walk;
@@ -1434,6 +1513,21 @@ fn pdfs_in(dir: &std::path::Path, recursive: bool) -> (Vec<std::path::PathBuf>, 
     }
     found.sort_by(|a, b| natural(&a.to_string_lossy(), &b.to_string_lossy()));
     (found, more)
+}
+
+/// Whether a file with extension `ext` can join the list: a PDF, or an image or text file that
+/// becomes one.
+fn combinable(ext: &str) -> bool {
+    std::iter::once("pdf").chain(pdfcraft_engine::CONVERTIBLE).any(|c| ext.eq_ignore_ascii_case(c))
+}
+
+/// A file's bookmark in the combined PDF: its name without ".pdf", or without the extension of
+/// the image or text file it was made from.
+fn title_of(name: &str) -> &str {
+    match name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() && combinable(ext) => stem,
+        _ => name,
+    }
 }
 
 /// File names in the order people expect: case-insensitive, with numbers by value
@@ -2191,12 +2285,35 @@ impl PdfCraftApp {
     pub(crate) fn stage_combine_with(&mut self, files: Vec<Incoming>) {
         let mut added = Vec::new();
         for Incoming { name, bytes, modified, note } in files {
-            let assessed = match assess(&bytes, None) {
-                Ok(a) => a,
-                Err(AssessError::Unreadable(e)) => {
-                    self.notify_fmt("Couldn't add {name}: {e}", &[("name", &name), ("e", &e)]);
-                    continue;
+            // Images and text files become PDFs as they join the list (#569): from then on they
+            // are ordinary files, with pages, thumbnails and page ranges.
+            // A file that can't be read joins the list all the same, with why (the Warnings
+            // column, its card); Combine asks before leaving it out.
+            let unreadable = |e: &str| Assessed {
+                pages: 0,
+                sizes: Arc::from(Vec::new()),
+                problem: Some(crate::i18n::fmt(tl!("Can't be read: {e}"), &[("e", e)])),
+                lock: None,
+                notes: Vec::new(),
+            };
+            let (bytes, assessed) = match self.session.as_pdf(&name, &bytes) {
+                Ok(pdf) => {
+                    let assessed = assess(&pdf, None);
+                    (pdf, assessed)
                 }
+                Err(e) => {
+                    // (The engine's message names the file, which the row already shows.)
+                    let e = match e {
+                        pdfcraft_engine::EditError::Source(m) => m,
+                        other => other.to_string(),
+                    };
+                    let why = e.strip_prefix(&format!("{name}: ")).unwrap_or(&e).to_string();
+                    (bytes, Ok(unreadable(&why)))
+                }
+            };
+            let assessed = match assessed {
+                Ok(a) => a,
+                Err(AssessError::Unreadable(e)) => unreadable(&e),
                 Err(AssessError::WrongPassword) => {
                     self.notify_fmt("Couldn't add {name}: {e}", &[("name", &name), ("e", "the password is wrong")]);
                     continue;
@@ -2286,7 +2403,8 @@ impl PdfCraftApp {
         self.combine_unlock(&ids, password)
     }
 
-    /// Add every PDF in a folder the user picks (and its subfolders, if `recursive`).
+    /// Add every PDF, image and text file in a folder the user picks (and its subfolders, if
+    /// `recursive`).
     pub fn combine_add_folder(&mut self, recursive: bool) {
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -2298,19 +2416,19 @@ impl PdfCraftApp {
         let _ = recursive;
     }
 
-    /// Add the PDFs in `dir` to the Combine files list, as one undo step.
+    /// Add the PDFs, images and text files in `dir` to the Combine files list, as one undo step.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn add_folder_to_combine(&mut self, dir: &std::path::Path, recursive: bool) {
-        let (paths, more) = pdfs_in(dir, recursive);
+        let (paths, more) = combinable_in(dir, recursive);
         let folder = dir.file_name().map_or_else(|| dir.to_string_lossy().into_owned(), |n| n.to_string_lossy().into_owned());
         if paths.is_empty() {
-            self.notify_fmt("No PDFs found in {folder}", &[("folder", &folder)]);
+            self.notify_fmt("No PDFs, images or text files found in {folder}", &[("folder", &folder)]);
             self.open_combine_tab();
             return;
         }
         self.use_paths(crate::files::FilePurpose::Combine, &paths);
         if more {
-            self.notify_fmt("Added the first {n} PDFs in {folder}", &[("n", &MAX_FOLDER_FILES.to_string()), ("folder", &folder)]);
+            self.notify_fmt("Added the first {n} files in {folder}", &[("n", &MAX_FOLDER_FILES.to_string()), ("folder", &folder)]);
         }
     }
 
@@ -2331,18 +2449,17 @@ impl PdfCraftApp {
     }
 
     /// Combine the listed files into a new, unsaved document; the tab makes way for it.
+    /// Files that can't be read are left out (the user was asked).
     pub fn combine_staged(&mut self) {
-        let files = &self.combine_draft;
+        let files: Vec<&CombineFile> = self.combine_draft.iter().filter(|f| !f.unreadable()).collect();
         if files.is_empty() {
             return;
         }
         // Each file once, however many parts it is in.
         let count = files.iter().map(|f| f.group).collect::<BTreeSet<u64>>().len();
         let groups: Vec<u64> = files.iter().map(|f| f.group).collect();
-        let sources: Vec<(String, Arc<Vec<u8>>, Option<String>)> = files
-            .iter()
-            .map(|f| (crate::files::strip_pdf(&f.name).to_string(), f.bytes.clone(), Some(f.range.clone()).filter(|r| !r.trim().is_empty())))
-            .collect();
+        let sources: Vec<(String, Arc<Vec<u8>>, Option<String>)> =
+            files.iter().map(|f| (title_of(&f.name).to_string(), f.bytes.clone(), Some(f.range.clone()).filter(|r| !r.trim().is_empty()))).collect();
         let passwords: Vec<Option<&str>> = files.iter().map(|f| f.password.as_ref().map(|p| p.0.as_str())).collect();
         match self.session.combine_grouped(&sources, &groups, &passwords) {
             Ok(bytes) => {
@@ -2421,6 +2538,16 @@ mod tests {
             now.sort_unstable();
             assert_eq!(now, (0..6).collect::<Vec<u64>>(), "every file once");
         }
+    }
+
+    #[test]
+    fn bookmarks_are_named_without_the_extension_of_a_converted_file() {
+        assert_eq!(title_of("report.pdf"), "report");
+        assert_eq!(title_of("REPORT.PDF"), "REPORT");
+        assert_eq!(title_of("scan.2024.JPG"), "scan.2024");
+        assert_eq!(title_of("notes.txt"), "notes");
+        assert_eq!(title_of("v1.2"), "v1.2", "not a known extension");
+        assert_eq!(title_of(".png"), ".png", "nothing would be left");
     }
 
     #[test]

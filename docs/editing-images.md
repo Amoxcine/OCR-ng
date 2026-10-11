@@ -3,7 +3,9 @@
 In **Edit a PDF → Edit text and images**, click a figure to select it. Drag the selected
 figure to move it, drag a corner to resize it proportionally, or press Delete to remove
 that placement. The context menu also rotates or flips it. Changes support undo and
-survive saving/reopening.
+survive saving/reopening. An image painted inside its own rectangular clip
+(`q … re W n … cm Do Q`, as PowerPoint exports it) moves and resizes together with that
+clip; a clip shared with other content stays where it is.
 
 PDF figures are not always bitmap images. Imported diagrams often use a **Form XObject**,
 which packages text, vector paths, and nested images into one object. PdfCraft selects
