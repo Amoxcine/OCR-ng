@@ -2158,3 +2158,33 @@ key	Space	Интервал
 	Resize panel window	Преоразмери прозореца на панела
 	Tools	Инструменти
 	Inspector	Инспектор
+# Edit text on scanned pages
+	Show original	Показване на оригинала
+	Borrowed or composed letters:	Заети или съставени букви:
+	Check the result closely.	Проверете внимателно резултата.
+	Composing the preview…	Създава се визуализация…
+	Edit scanned text	Редактиране на сканиран текст
+	Editing it could leave traces of the old letters, so it was not done.	Редакцията можеше да остави следи от старите букви, затова не е извършена.
+	Letters from this page, style	Букви от тази страница, стил
+	Other pages show the same scan; they keep the original.	Други страници показват същото сканиране; те запазват оригинала.
+	Reading the scan…	Четене на сканирането…
+	Recognize its text first.	Първо разпознайте текста му.
+	Scan size:	Размер на сканирането:
+	Shorten it: paragraphs can't be reflowed yet.	Съкратете го: абзаците все още не могат да се пренареждат.
+	Spacing was adjusted to fit the line.	Разстоянията са коригирани, за да се побере на реда.
+	The edit failed a safety check and was not made.	Редакцията не премина проверка за безопасност и не е извършена.
+	The letters of this text couldn't be told apart reliably.	Буквите на този текст не можаха да бъдат разделени надеждно.
+	The new letters would touch a neighbouring line.	Новите букви биха докоснали съседен ред.
+	The new text doesn't fit on this line.	Новият текст не се побира на този ред.
+	The page is unchanged.	Страницата не е променена.
+	The paper behind this line is textured: check the erased area.	Хартията зад този ред е с текстура: проверете изтритата област.
+	The text is unchanged.	Текстът не е променен.
+	This kind of scan can't be edited yet.	Този вид сканиране все още не може да се редактира.
+	This page has no sample of:	Тази страница няма образец за:
+	This scan couldn't be read.	Сканирането не можа да бъде прочетено.
+	This scan is too large to edit.	Това сканиране е твърде голямо за редактиране.
+	This scanned page has no text layer yet.	Тази сканирана страница все още няма текстов слой.
+	Try a shorter word, or one without tall or descending letters.	Опитайте по-кратка дума или такава без високи букви и долни елементи.
+	Type the corrected text; the preview shows the real result.	Въведете поправения текст; визуализацията показва истинския резултат.
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Използвайте букви, които се срещат другаде на страницата; букви с ударение могат да се съставят, ако знакът се среща някъде на страницата.
+	rewritten without loss	презаписано без загуба

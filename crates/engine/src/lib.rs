@@ -23,6 +23,7 @@ pub mod links;
 pub mod ocr;
 pub mod optimizer;
 mod scan;
+pub use scan::ScanJob;
 pub mod signature_image;
 mod upright_image;
 pub mod xfa;

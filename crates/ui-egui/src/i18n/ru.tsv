@@ -2109,3 +2109,33 @@ key	Space	Пробел
 	Resize panel window	Изменить размер окна панели
 	Tools	Инструменты
 	Inspector	Инспектор
+# Edit text on scanned pages
+	Show original	Показать оригинал
+	Borrowed or composed letters:	Заимствованные или составленные буквы:
+	Check the result closely.	Внимательно проверьте результат.
+	Composing the preview…	Создаётся предпросмотр…
+	Edit scanned text	Изменить отсканированный текст
+	Editing it could leave traces of the old letters, so it was not done.	Изменение могло оставить следы старых букв, поэтому оно не выполнено.
+	Letters from this page, style	Буквы с этой страницы, стиль
+	Other pages show the same scan; they keep the original.	Другие страницы показывают тот же скан; на них остаётся оригинал.
+	Reading the scan…	Чтение скана…
+	Recognize its text first.	Сначала распознайте его текст.
+	Scan size:	Размер скана:
+	Shorten it: paragraphs can't be reflowed yet.	Сократите его: перекомпоновка абзацев пока не поддерживается.
+	Spacing was adjusted to fit the line.	Интервалы изменены, чтобы текст поместился в строку.
+	The edit failed a safety check and was not made.	Изменение не прошло проверку безопасности и не выполнено.
+	The letters of this text couldn't be told apart reliably.	Не удалось надёжно разделить буквы этого текста.
+	The new letters would touch a neighbouring line.	Новые буквы задели бы соседнюю строку.
+	The new text doesn't fit on this line.	Новый текст не помещается в эту строку.
+	The page is unchanged.	Страница не изменена.
+	The paper behind this line is textured: check the erased area.	Бумага за этой строкой имеет фактуру: проверьте стёртую область.
+	The text is unchanged.	Текст не изменился.
+	This kind of scan can't be edited yet.	Такой скан пока нельзя изменить.
+	This page has no sample of:	На этой странице нет образца для:
+	This scan couldn't be read.	Не удалось прочитать этот скан.
+	This scan is too large to edit.	Этот скан слишком большой для изменения.
+	This scanned page has no text layer yet.	На этой отсканированной странице ещё нет текстового слоя.
+	Try a shorter word, or one without tall or descending letters.	Попробуйте более короткое слово или слово без высоких букв и выносных элементов.
+	Type the corrected text; the preview shows the real result.	Введите исправленный текст; предпросмотр показывает реальный результат.
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Используйте буквы, которые есть в другом месте страницы; буквы с диакритикой можно составить, если знак есть где-то на странице.
+	rewritten without loss	перезаписан без потерь

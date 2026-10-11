@@ -2112,3 +2112,33 @@ key	Space	Espacio
 	Resize panel window	Cambiar tamaño de la ventana del panel
 	Tools	Herramientas
 	Inspector	Inspector
+# Edit text on scanned pages
+	Show original	Mostrar original
+	Borrowed or composed letters:	Letras prestadas o compuestas:
+	Check the result closely.	Revise el resultado con atención.
+	Composing the preview…	Componiendo la vista previa…
+	Edit scanned text	Editar texto escaneado
+	Editing it could leave traces of the old letters, so it was not done.	La edición podría dejar rastros de las letras antiguas, así que no se hizo.
+	Letters from this page, style	Letras de esta página, estilo
+	Other pages show the same scan; they keep the original.	Otras páginas muestran el mismo escaneo; conservan el original.
+	Reading the scan…	Leyendo el escaneo…
+	Recognize its text first.	Reconozca primero su texto.
+	Scan size:	Tamaño del escaneo:
+	Shorten it: paragraphs can't be reflowed yet.	Acórtelo: aún no se pueden recomponer los párrafos.
+	Spacing was adjusted to fit the line.	Se ajustó el espaciado para que quepa en la línea.
+	The edit failed a safety check and was not made.	La edición no superó una comprobación de seguridad y no se hizo.
+	The letters of this text couldn't be told apart reliably.	No se pudieron separar con fiabilidad las letras de este texto.
+	The new letters would touch a neighbouring line.	Las letras nuevas tocarían una línea vecina.
+	The new text doesn't fit on this line.	El texto nuevo no cabe en esta línea.
+	The page is unchanged.	La página no ha cambiado.
+	The paper behind this line is textured: check the erased area.	El papel detrás de esta línea tiene textura: revise la zona borrada.
+	The text is unchanged.	El texto no ha cambiado.
+	This kind of scan can't be edited yet.	Este tipo de escaneo aún no se puede editar.
+	This page has no sample of:	Esta página no tiene ninguna muestra de:
+	This scan couldn't be read.	No se pudo leer este escaneo.
+	This scan is too large to edit.	Este escaneo es demasiado grande para editarlo.
+	This scanned page has no text layer yet.	Esta página escaneada aún no tiene capa de texto.
+	Try a shorter word, or one without tall or descending letters.	Pruebe una palabra más corta, o sin letras altas ni descendentes.
+	Type the corrected text; the preview shows the real result.	Escriba el texto corregido; la vista previa muestra el resultado real.
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Use letras que aparezcan en otra parte de la página; las letras con tilde se pueden componer si la tilde aparece en algún lugar de la página.
+	rewritten without loss	reescrito sin pérdida

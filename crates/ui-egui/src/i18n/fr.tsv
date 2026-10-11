@@ -2196,3 +2196,33 @@ key	Space	Espace
 	Resize panel window	Redimensionner la fenêtre du panneau
 	Tools	Outils
 	Inspector	Inspecteur
+# Edit text on scanned pages
+	Show original	Voir l'original
+	Borrowed or composed letters:	Lettres empruntées ou composées :
+	Check the result closely.	Vérifiez attentivement le résultat.
+	Composing the preview…	Composition de l'aperçu…
+	Edit scanned text	Modifier le texte numérisé
+	Editing it could leave traces of the old letters, so it was not done.	La modification pourrait laisser des traces des anciennes lettres ; elle n'a pas été faite.
+	Letters from this page, style	Lettres tirées de cette page, style
+	Other pages show the same scan; they keep the original.	D'autres pages affichent le même scan ; elles gardent l'original.
+	Reading the scan…	Lecture du scan…
+	Recognize its text first.	Reconnaissez d'abord son texte.
+	Scan size:	Taille du scan :
+	Shorten it: paragraphs can't be reflowed yet.	Raccourcissez-le : les paragraphes ne peuvent pas encore être recomposés.
+	Spacing was adjusted to fit the line.	L'espacement a été ajusté pour tenir sur la ligne.
+	The edit failed a safety check and was not made.	La modification n'a pas passé un contrôle de sécurité et n'a pas été faite.
+	The letters of this text couldn't be told apart reliably.	Les lettres de ce texte n'ont pas pu être séparées de façon fiable.
+	The new letters would touch a neighbouring line.	Les nouvelles lettres toucheraient une ligne voisine.
+	The new text doesn't fit on this line.	Le nouveau texte ne tient pas sur cette ligne.
+	The page is unchanged.	La page n'a pas été modifiée.
+	The paper behind this line is textured: check the erased area.	Le papier derrière cette ligne est texturé : vérifiez la zone effacée.
+	The text is unchanged.	Le texte n'a pas changé.
+	This kind of scan can't be edited yet.	Ce type de scan ne peut pas encore être modifié.
+	This page has no sample of:	Cette page n'a aucun exemple de :
+	This scan couldn't be read.	Ce scan n'a pas pu être lu.
+	This scan is too large to edit.	Ce scan est trop grand pour être modifié.
+	This scanned page has no text layer yet.	Cette page numérisée n'a pas encore de calque de texte.
+	Try a shorter word, or one without tall or descending letters.	Essayez un mot plus court, ou sans lettres hautes ni jambages.
+	Type the corrected text; the preview shows the real result.	Saisissez le texte corrigé ; l'aperçu montre le résultat réel.
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Utilisez des lettres présentes ailleurs sur la page ; une lettre accentuée peut être composée si l'accent figure quelque part sur la page.
+	rewritten without loss	réécrit sans perte

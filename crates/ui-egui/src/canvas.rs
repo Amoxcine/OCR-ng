@@ -357,6 +357,8 @@ pub struct DocView {
     pub image_selection: Option<crate::edit_text_ui::ImageSelection>,
     /// A paragraph box being dragged (moved, or resized from its right edge) in Edit text.
     pub block_drag: Option<crate::edit_text_ui::BlockDrag>,
+    /// Edit text on scanned pages: each page's analysis and the line being edited.
+    pub scan: crate::scan_edit_ui::ScanView,
     /// Commenting state: selected comment, gestures, composer.
     pub comments: crate::comments::CommentView,
     pub measure: crate::measure_ui::MeasureView,
@@ -549,6 +551,7 @@ impl DocView {
             objects: Default::default(),
             image_selection: None,
             block_drag: None,
+            scan: Default::default(),
             pending_action: None,
             insert_at: None,
             grid_gap: None,
@@ -1762,6 +1765,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     // Edit a PDF: added text and images can be selected, moved and edited.
     let editing_content = (app.left_open && app.left == crate::LeftPanel::Tool("edit")) || app.quick_tool == QuickTool::AddText;
     let text_style = app.text_style.clone();
+    let inline = app.run_inline;
     let view = &mut app.views[index];
     // Opened without the owner password and something is restricted.
     let secured = doc.security_summary().is_some_and(|s| !(s.owner || (s.permissions.modify() && s.permissions.assemble())));
@@ -2275,12 +2279,14 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 };
                 crate::redact_ui::page_input(ui, &resp, &xf, i, info, over_text, view)
             };
-            let on_objects = tool == QuickTool::EditText && can_modify && crate::object_ui::page_input(ui, &resp, &xf, i, doc, view);
+            // A scanned page is edited as a scan (its pixels), not through its invisible text.
+            let on_scan = tool == QuickTool::EditText && can_modify && crate::scan_edit_ui::page_input(ui, &resp, &xf, i, info, doc, view, inline);
+            let on_objects = !on_scan && tool == QuickTool::EditText && can_modify && crate::object_ui::page_input(ui, &resp, &xf, i, doc, view);
             let on_content = !on_objects && editing_content && can_modify && {
                 crate::content_ui::page_input(ui, &resp, &xf, i, info, &added, tool == QuickTool::AddText, &text_style, view)
                     || tool == QuickTool::AddText
             };
-            let on_edit_text = !on_objects && tool == QuickTool::EditText && can_modify && {
+            let on_edit_text = !on_scan && !on_objects && tool == QuickTool::EditText && can_modify && {
                 let generation = doc.edit_generation();
                 let lines = match view.edit_lines.get(&i) {
                     Some((g, l)) if *g == generation => l.clone(),
@@ -2303,7 +2309,8 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     || crate::edit_text_ui::page_input(ui, &resp, &xf, i, info, &lines, view)
             };
             let on_link = tool == QuickTool::Link && can_modify && crate::link_ui::page_input(ui, &resp, &xf, i, info, &doc_links, view);
-            let consumed = on_objects || on_edit_text || on_link || on_content || boxing || on_field || comments::page_input(ui, &resp, &pcx, view);
+            let consumed =
+                on_scan || on_objects || on_edit_text || on_link || on_content || boxing || on_field || comments::page_input(ui, &resp, &pcx, view);
 
             let preview_target =
                 (matches!(tool, QuickTool::Select | QuickTool::Fill(_)) && !comments_hidden).then_some(view.comments.selected).flatten();
@@ -2437,6 +2444,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             }
             if tool == QuickTool::EditText {
                 crate::object_ui::paint(painter, &xf, i, info, &view.objects);
+                crate::scan_edit_ui::paint(ui.ctx(), painter, &xf, i, info, view);
             }
             if tool == QuickTool::Link {
                 crate::link_ui::paint(ui, painter, &xf, i, info, &doc_links, view);
@@ -2655,6 +2663,14 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     if let Some(e) = crate::edit_text_ui::overlay(ui.ctx(), view, info) {
         view.pending_edit = Some(e);
     }
+    if tool == QuickTool::EditText {
+        if let Some(e) = crate::scan_edit_ui::panel(ui.ctx(), view, inline) {
+            view.pending_edit = Some(e);
+        }
+    } else {
+        view.scan.editor = None;
+    }
+    let scan_ocr = view.scan.ocr_request.take();
     if let Some(e) = crate::forms_ui::overlay(ui.ctx(), view, info, &form, today) {
         view.pending_edit = Some(e);
     }
@@ -2780,6 +2796,12 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         } else {
             app.redact_prefs.mark(page, quads, &author)
         });
+    }
+    if let Some(page) = scan_ocr {
+        app.ocr_draft.pages = crate::ocr_ui::OcrPages::Range;
+        app.ocr_draft.from = page + 1;
+        app.ocr_draft.to = page + 1;
+        app.start_ocr();
     }
     match image_action {
         Some(crate::edit_text_ui::ImageAction::Replace(page, index)) => app.replace_page_image_dialog(page, index),

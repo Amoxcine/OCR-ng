@@ -2082,3 +2082,33 @@ key	Space	空格
 	Resize panel window	調整面板視窗大小
 	Tools	工具
 	Inspector	檢查器
+# Edit text on scanned pages
+	Show original	顯示原圖
+	Borrowed or composed letters:	借用或合成的字母:
+	Check the result closely.	請仔細檢查結果。
+	Composing the preview…	正在產生預覽…
+	Edit scanned text	編輯掃描文字
+	Editing it could leave traces of the old letters, so it was not done.	此編輯可能留下舊字母的痕跡,因此未執行。
+	Letters from this page, style	來自本頁的字母,樣式
+	Other pages show the same scan; they keep the original.	其他頁面顯示同一掃描影像;它們保持原樣。
+	Reading the scan…	正在讀取掃描影像…
+	Recognize its text first.	請先辨識其文字。
+	Scan size:	掃描影像大小:
+	Shorten it: paragraphs can't be reflowed yet.	請縮短:暫不支援重新排列段落。
+	Spacing was adjusted to fit the line.	已調整間距以符合該行。
+	The edit failed a safety check and was not made.	編輯未通過安全檢查,未執行。
+	The letters of this text couldn't be told apart reliably.	無法可靠地分開此文字的字母。
+	The new letters would touch a neighbouring line.	新字母會碰到相鄰的行。
+	The new text doesn't fit on this line.	新文字放不進這一行。
+	The page is unchanged.	頁面未變更。
+	The paper behind this line is textured: check the erased area.	此行背後的紙張有紋理:請檢查清除區域。
+	The text is unchanged.	文字未變更。
+	This kind of scan can't be edited yet.	暫時無法編輯這種掃描影像。
+	This page has no sample of:	此頁面沒有以下字母的樣本:
+	This scan couldn't be read.	無法讀取此掃描影像。
+	This scan is too large to edit.	此掃描影像太大,無法編輯。
+	This scanned page has no text layer yet.	此掃描頁面還沒有文字層。
+	Try a shorter word, or one without tall or descending letters.	請嘗試更短的字詞,或不含高字母和下伸字母的字詞。
+	Type the corrected text; the preview shows the real result.	輸入更正後的文字;預覽顯示真實結果。
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	請使用頁面其他地方出現的字母;如果重音符號出現在頁面某處,就可以合成帶重音的字母。
+	rewritten without loss	已無損重寫

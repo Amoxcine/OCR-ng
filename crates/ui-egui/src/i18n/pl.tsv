@@ -2191,3 +2191,33 @@ key	Space	Spacja
 	Text used as a clipping path cannot be moved with this selection.	Tekstu używanego jako ścieżka przycinania nie można przenieść razem z tym zaznaczeniem.
 	These objects could not be moved. Select them again and try a smaller move.	Nie udało się przenieść tych obiektów. Zaznacz je ponownie i spróbuj mniejszego przesunięcia.
 	This page contains objects that cannot be selected together.	Ta strona zawiera obiekty, których nie można zaznaczyć razem.
+# Edit text on scanned pages
+	Show original	Pokaż oryginał
+	Borrowed or composed letters:	Litery zapożyczone lub złożone:
+	Check the result closely.	Dokładnie sprawdź wynik.
+	Composing the preview…	Tworzenie podglądu…
+	Edit scanned text	Edytuj zeskanowany tekst
+	Editing it could leave traces of the old letters, so it was not done.	Edycja mogłaby zostawić ślady starych liter, więc jej nie wykonano.
+	Letters from this page, style	Litery z tej strony, styl
+	Other pages show the same scan; they keep the original.	Inne strony pokazują ten sam skan; zachowują oryginał.
+	Reading the scan…	Odczytywanie skanu…
+	Recognize its text first.	Najpierw rozpoznaj jego tekst.
+	Scan size:	Rozmiar skanu:
+	Shorten it: paragraphs can't be reflowed yet.	Skróć go: akapitów nie można jeszcze przełamać na nowo.
+	Spacing was adjusted to fit the line.	Odstępy dopasowano, aby tekst zmieścił się w wierszu.
+	The edit failed a safety check and was not made.	Edycja nie przeszła kontroli bezpieczeństwa i nie została wykonana.
+	The letters of this text couldn't be told apart reliably.	Nie udało się wiarygodnie rozdzielić liter tego tekstu.
+	The new letters would touch a neighbouring line.	Nowe litery dotknęłyby sąsiedniego wiersza.
+	The new text doesn't fit on this line.	Nowy tekst nie mieści się w tym wierszu.
+	The page is unchanged.	Strona nie została zmieniona.
+	The paper behind this line is textured: check the erased area.	Papier za tym wierszem ma fakturę: sprawdź wymazany obszar.
+	The text is unchanged.	Tekst się nie zmienił.
+	This kind of scan can't be edited yet.	Tego rodzaju skanu nie można jeszcze edytować.
+	This page has no sample of:	Ta strona nie zawiera próbki dla:
+	This scan couldn't be read.	Nie udało się odczytać tego skanu.
+	This scan is too large to edit.	Ten skan jest za duży, aby go edytować.
+	This scanned page has no text layer yet.	Ta zeskanowana strona nie ma jeszcze warstwy tekstowej.
+	Try a shorter word, or one without tall or descending letters.	Spróbuj krótszego słowa albo takiego bez wysokich liter i wydłużeń dolnych.
+	Type the corrected text; the preview shows the real result.	Wpisz poprawiony tekst; podgląd pokazuje rzeczywisty wynik.
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Użyj liter, które występują w innym miejscu strony; litery ze znakami diakrytycznymi można złożyć, jeśli znak występuje gdzieś na stronie.
+	rewritten without loss	zapisany ponownie bez strat

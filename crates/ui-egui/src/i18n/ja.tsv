@@ -2196,3 +2196,33 @@ key	Space	スペース
 	Resize panel window	パネルウィンドウのサイズを変更
 	Tools	ツール
 	Inspector	インスペクター
+# Edit text on scanned pages
+	Show original	元の画像を表示
+	Borrowed or composed letters:	借用または合成した文字:
+	Check the result closely.	結果をよく確認してください。
+	Composing the preview…	プレビューを作成中…
+	Edit scanned text	スキャンしたテキストを編集
+	Editing it could leave traces of the old letters, so it was not done.	古い文字の跡が残るおそれがあるため、編集は行われませんでした。
+	Letters from this page, style	このページの文字、スタイル
+	Other pages show the same scan; they keep the original.	同じスキャンを表示しているページが他にもあります。それらは元のままです。
+	Reading the scan…	スキャンを読み取り中…
+	Recognize its text first.	先にテキストを認識してください。
+	Scan size:	スキャンのサイズ:
+	Shorten it: paragraphs can't be reflowed yet.	短くしてください。段落の再配置にはまだ対応していません。
+	Spacing was adjusted to fit the line.	行に収まるように間隔を調整しました。
+	The edit failed a safety check and was not made.	安全チェックに通らなかったため、編集は行われませんでした。
+	The letters of this text couldn't be told apart reliably.	このテキストの文字を確実に切り分けられませんでした。
+	The new letters would touch a neighbouring line.	新しい文字が隣の行に接触してしまいます。
+	The new text doesn't fit on this line.	新しいテキストがこの行に収まりません。
+	The page is unchanged.	ページは変更されていません。
+	The paper behind this line is textured: check the erased area.	この行の背景の紙に模様があります。消去した部分を確認してください。
+	The text is unchanged.	テキストは変更されていません。
+	This kind of scan can't be edited yet.	この種類のスキャンはまだ編集できません。
+	This page has no sample of:	このページには次の文字の見本がありません:
+	This scan couldn't be read.	このスキャンを読み取れませんでした。
+	This scan is too large to edit.	このスキャンは大きすぎて編集できません。
+	This scanned page has no text layer yet.	このスキャンしたページにはまだテキストレイヤーがありません。
+	Try a shorter word, or one without tall or descending letters.	もっと短い語か、背の高い文字やディセンダーのない語を試してください。
+	Type the corrected text; the preview shows the real result.	修正後のテキストを入力してください。プレビューは実際の結果を表示します。
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	このページの他の場所にある文字を使ってください。アクセント付きの文字は、そのアクセントがページのどこかにあれば合成できます。
+	rewritten without loss	劣化なしで書き直し

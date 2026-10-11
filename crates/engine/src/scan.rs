@@ -74,3 +74,70 @@ impl Session {
         Ok(report)
     }
 }
+
+/// What analysing or previewing a scanned page needs, detached from the session so it can run on
+/// a worker thread (the UI keeps drawing meanwhile). Results land in the same cache, so applying
+/// the previewed edit afterwards is quick.
+#[derive(Clone)]
+pub struct ScanJob {
+    cos: pdfcraft_cos::Document,
+    pub page: usize,
+}
+
+impl ScanJob {
+    pub fn analyse(&self) -> Result<Arc<scanedit::Analysis>, scanedit::ScanError> {
+        analysis(&self.cos, self.page).map(|(_, a)| a)
+    }
+
+    /// Compose `text` for `target` without changing anything.
+    pub fn preview(&self, target: &scanedit::Target, text: &str) -> Result<(Arc<scanedit::Analysis>, Arc<scanedit::Prepared>), scanedit::ScanError> {
+        let (key, an) = analysis(&self.cos, self.page)?;
+        let p = prepared(key, &an, target, text)?;
+        Ok((an, p))
+    }
+}
+
+impl crate::Document {
+    /// A [`ScanJob`] for `page`, if the document can be edited.
+    pub fn scan_job(&self, page: usize) -> Option<ScanJob> {
+        let e = self.editor.as_ref()?;
+        (page < self.info.pages.len()).then(|| ScanJob { cos: e.cos.clone(), page })
+    }
+
+    /// Whether `page` looks scanned: one image (or stacked strips) covers most of it. Cheap: no
+    /// pixels are decoded.
+    pub fn looks_scanned(&self, page: usize) -> bool {
+        let Some(p) = self.info.pages.get(page) else { return false };
+        let area = (f64::from(p.width) * f64::from(p.height)).max(1.0);
+        let covered: f64 = self
+            .page_images(page)
+            .iter()
+            .filter(|i| !i.is_form && i.width > 1 && i.height > 1)
+            .map(|i| (i.rect[2] - i.rect[0]) * (i.rect[3] - i.rect[1]))
+            .sum();
+        covered / area >= 0.5
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The job runs on another thread and fills the cache the session's edit then uses.
+    #[test]
+    fn jobs_run_off_the_ui_thread() {
+        let f = scanedit::synth::generate(&scanedit::synth::Spec::default()).unwrap_or_else(|e| panic!("{e}"));
+        let mut s = Session::new();
+        let id = s.open("scan.pdf", None, Arc::new(f.pdf), None).unwrap_or_else(|e| panic!("{e}"));
+        let doc = s.get(id).unwrap_or_else(|| panic!("open"));
+        assert!(doc.looks_scanned(0));
+        let job = doc.scan_job(0).unwrap_or_else(|| panic!("job"));
+        let target = scanedit::Target::Find { text: "lazy".into(), occurrence: 0 };
+        let handle = std::thread::spawn(move || job.preview(&target, "tough").map(|(_, p)| p.report.new_text.clone()));
+        let text = handle.join().unwrap_or_else(|_| panic!("thread")).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(text, "The quick brown fox jumps over the tough dog.");
+        s.apply(id, Edit::ScanReplaceText { page: 0, target: scanedit::Target::Find { text: "lazy".into(), occurrence: 0 }, text: "tough".into() })
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert!(s.get(id).map(|d| d.text_lines(0)).unwrap_or_default().iter().any(|l| l.text.contains("tough")));
+    }
+}

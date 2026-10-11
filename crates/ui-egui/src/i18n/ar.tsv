@@ -2216,3 +2216,33 @@ key	Space	مسافة
 	Panels	اللوحات
 	Resize panels	تغيير حجم اللوحات
 	Resize panel window	تغيير حجم نافذة اللوحة
+# Edit text on scanned pages
+	Show original	إظهار الأصل
+	Borrowed or composed letters:	حروف مستعارة أو مركّبة:
+	Check the result closely.	راجع النتيجة بعناية.
+	Composing the preview…	جارٍ إنشاء المعاينة…
+	Edit scanned text	تحرير النص الممسوح ضوئيًا
+	Editing it could leave traces of the old letters, so it was not done.	قد يترك التحرير آثارًا من الحروف القديمة، لذلك لم يُنفَّذ.
+	Letters from this page, style	حروف من هذه الصفحة، النمط
+	Other pages show the same scan; they keep the original.	تعرض صفحات أخرى المسح نفسه؛ وتحتفظ بالأصل.
+	Reading the scan…	جارٍ قراءة المسح…
+	Recognize its text first.	تعرّف على نصه أولًا.
+	Scan size:	حجم المسح:
+	Shorten it: paragraphs can't be reflowed yet.	اختصره: لا يمكن إعادة ترتيب الفقرات بعد.
+	Spacing was adjusted to fit the line.	عُدّلت المسافات ليتسع النص في السطر.
+	The edit failed a safety check and was not made.	لم يجتز التحرير فحص أمان ولم يُنفَّذ.
+	The letters of this text couldn't be told apart reliably.	تعذّر فصل حروف هذا النص بشكل موثوق.
+	The new letters would touch a neighbouring line.	ستلامس الحروف الجديدة سطرًا مجاورًا.
+	The new text doesn't fit on this line.	النص الجديد لا يتسع في هذا السطر.
+	The page is unchanged.	لم تتغير الصفحة.
+	The paper behind this line is textured: check the erased area.	الورق خلف هذا السطر ذو ملمس: تحقّق من المنطقة الممسوحة.
+	The text is unchanged.	لم يتغير النص.
+	This kind of scan can't be edited yet.	لا يمكن تحرير هذا النوع من المسح بعد.
+	This page has no sample of:	لا تحتوي هذه الصفحة على عيّنة من:
+	This scan couldn't be read.	تعذّرت قراءة هذا المسح.
+	This scan is too large to edit.	هذا المسح كبير جدًا بحيث لا يمكن تحريره.
+	This scanned page has no text layer yet.	لا تحتوي هذه الصفحة الممسوحة على طبقة نص بعد.
+	Try a shorter word, or one without tall or descending letters.	جرّب كلمة أقصر، أو كلمة بلا حروف طويلة أو نازلة.
+	Type the corrected text; the preview shows the real result.	اكتب النص المصحّح؛ تعرض المعاينة النتيجة الفعلية.
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	استخدم حروفًا موجودة في مكان آخر من الصفحة؛ يمكن تركيب الحروف المشكولة إذا ظهرت العلامة في مكان ما من الصفحة.
+	rewritten without loss	أُعيدت كتابته دون فقد

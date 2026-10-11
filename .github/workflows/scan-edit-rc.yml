@@ -1,0 +1,145 @@
+# Scan editing release candidates: unsigned installable builds for testers.
+#
+# The upstream release pipeline (release.yml) signs with secrets this fork doesn't have, so it is
+# left alone; this workflow builds without signing and says so in the release notes (Windows
+# shows a SmartScreen warning for unsigned programs). It reuses the packaging scripts unchanged:
+# the OCR models are fetched by `cargo xtask models` (pinned by SHA-256 in ATTRIBUTION.toml) and
+# shipped beside the program, as in upstream releases, with their attribution files.
+#
+# Runs on a tag `scan-edit-rc*` (publishes a pre-release with the builds) or by hand (builds only).
+name: Scan edit RC
+
+on:
+  push:
+    tags: ['scan-edit-rc*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scan-edit-rc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-x64:
+    name: Windows x64 (unsigned)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # The craft-fonts build input (Japanese fonts), pinned as in release.yml.
+      - name: Check out craft-fonts
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: storytold/craft-fonts
+          ref: 8dcdacd5153e64560d109541a47d806f26f048c0
+          path: craft-fonts
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: scan-edit-rc-windows-x64
+      - name: Install WiX
+        shell: pwsh
+        run: dotnet tool install --global wix --version 5.0.2
+      # No signing secrets are given: sign.ps1 skips signing with a warning.
+      - name: Build and package (portable zip, MSI)
+        shell: pwsh
+        env:
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+          CRAFT_FONTS_REQUIRED: "1"
+        run: ./packaging/windows/package.ps1 -Arch x64
+      - name: Check the portable zip
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist/release/*-windows-x64-portable.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath "$env:RUNNER_TEMP/portable"
+          $dir = Get-ChildItem "$env:RUNNER_TEMP/portable" -Directory | Select-Object -First 1
+          if (-not (Get-ChildItem "$($dir.FullName)/models/*.rten")) { throw 'no OCR models in the portable zip' }
+          & "$($dir.FullName)/pdfcraft-cli.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw 'pdfcraft-cli does not run' }
+          # The scan tools are there.
+          $tools = & "$($dir.FullName)/pdfcraft-cli.exe" tools | Out-String
+          if ($tools -notmatch 'scan_edit_text') { throw 'scan_edit_text is missing from the tools' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scan-edit-rc-windows-x64
+          path: dist/release/*
+          if-no-files-found: error
+
+  linux-x86_64:
+    name: Linux x86_64 AppImage (unsigned)
+    # The oldest GitHub-hosted image, as in release.yml (glibc >= 2.35).
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Check out craft-fonts
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: storytold/craft-fonts
+          ref: 8dcdacd5153e64560d109541a47d806f26f048c0
+          path: craft-fonts
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev \
+            desktop-file-utils zsync
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: scan-edit-rc-linux-x86_64
+      - name: Build and package (AppImage, tar.gz)
+        env:
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+          CRAFT_FONTS_REQUIRED: "1"
+        run: packaging/linux/package.sh --formats "appimage tar"
+      - name: Check the AppImage and try scan editing with the packaged CLI
+        run: |
+          for appimage in dist/release/*.AppImage; do
+            chmod +x "$appimage"
+            APPIMAGE_EXTRACT_AND_RUN=1 "$appimage" --version
+            (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$appimage" --appimage-extract > /dev/null)
+            ls "$RUNNER_TEMP"/squashfs-root/usr/share/pdfcraft/models/*.rten
+          done
+          tarball=$(ls dist/release/pdfcraft-*-linux-x86_64.tar.gz | grep -v pdfcraft-cli | head -1)
+          mkdir -p "$RUNNER_TEMP/tar" && tar -xzf "$tarball" -C "$RUNNER_TEMP/tar"
+          cli=$(ls "$RUNNER_TEMP"/tar/*/bin/pdfcraft-cli)
+          # A generated scan (no real scan is ever stored), recognised then edited headlessly.
+          cargo run -q -p pdfcraft-scanedit --example scan_fixture -- "$RUNNER_TEMP/scan.pdf" --no-text-layer
+          cat > "$RUNNER_TEMP/steps.json" <<'EOF'
+          [{"tool": "doc_open", "args": {"path": "scan.pdf"}},
+           {"tool": "ocr_recognize", "args": {"doc": 1}},
+           {"tool": "scan_edit_text", "args": {"doc": 1, "page": 1, "find": "three", "text": "seven"}},
+           {"tool": "doc_save", "args": {"doc": 1, "path": "edited.pdf"}}]
+          EOF
+          "$cli" run --script "$RUNNER_TEMP/steps.json" --root "$RUNNER_TEMP"
+          "$cli" text "$RUNNER_TEMP/edited.pdf" | grep -q "seven"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scan-edit-rc-linux-x86_64
+          path: dist/release/*
+          if-no-files-found: error
+
+  release:
+    name: Pre-release
+    if: startsWith(github.ref, 'refs/tags/scan-edit-rc')
+    needs: [windows-x64, linux-x86_64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="docs/scan-edit/RELEASE-NOTES-${GITHUB_REF_NAME}.md"
+          [ -f "$notes" ] || notes="docs/scan-edit/STATUS.md"
+          gh release create "$GITHUB_REF_NAME" artifacts/* --prerelease --title "$GITHUB_REF_NAME — scan editing release candidate (unsigned)" --notes-file "$notes" --repo "$GITHUB_REPOSITORY" \
+            || gh release upload "$GITHUB_REF_NAME" artifacts/* --clobber --repo "$GITHUB_REPOSITORY"

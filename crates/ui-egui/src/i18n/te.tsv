@@ -2126,3 +2126,33 @@ key	Space	స్పేస్
 	Resize panel window	ప్యానెల్ విండో పరిమాణం మార్చు
 	Tools	సాధనాలు
 	Inspector	పరిశీలకుడు
+# Edit text on scanned pages
+	Show original	అసలుది చూపు
+	Borrowed or composed letters:	అరువు తెచ్చిన లేదా కూర్చిన అక్షరాలు:
+	Check the result closely.	ఫలితాన్ని జాగ్రత్తగా తనిఖీ చేయండి.
+	Composing the preview…	ముందుచూపు తయారవుతోంది…
+	Edit scanned text	స్కాన్ చేసిన వచనాన్ని సవరించు
+	Editing it could leave traces of the old letters, so it was not done.	సవరణ పాత అక్షరాల జాడలు వదిలే అవకాశం ఉంది, కాబట్టి అది చేయలేదు.
+	Letters from this page, style	ఈ పేజీలోని అక్షరాలు, శైలి
+	Other pages show the same scan; they keep the original.	ఇతర పేజీలు అదే స్కాన్‌ను చూపుతాయి; అవి అసలుదాన్నే ఉంచుకుంటాయి.
+	Reading the scan…	స్కాన్‌ను చదువుతోంది…
+	Recognize its text first.	ముందుగా దాని వచనాన్ని గుర్తించండి.
+	Scan size:	స్కాన్ పరిమాణం:
+	Shorten it: paragraphs can't be reflowed yet.	దాన్ని కుదించండి: పేరాలను ఇంకా తిరిగి అమర్చలేము.
+	Spacing was adjusted to fit the line.	పంక్తిలో సరిపోయేలా ఖాళీలను సర్దుబాటు చేశాం.
+	The edit failed a safety check and was not made.	సవరణ భద్రతా తనిఖీలో విఫలమైంది, అందుకే చేయలేదు.
+	The letters of this text couldn't be told apart reliably.	ఈ వచనంలోని అక్షరాలను నమ్మకంగా వేరుచేయలేకపోయాం.
+	The new letters would touch a neighbouring line.	కొత్త అక్షరాలు పక్క పంక్తిని తాకుతాయి.
+	The new text doesn't fit on this line.	కొత్త వచనం ఈ పంక్తిలో సరిపోదు.
+	The page is unchanged.	పేజీ మారలేదు.
+	The paper behind this line is textured: check the erased area.	ఈ పంక్తి వెనుక కాగితానికి ఆకృతి ఉంది: చెరిపిన ప్రాంతాన్ని తనిఖీ చేయండి.
+	The text is unchanged.	వచనం మారలేదు.
+	This kind of scan can't be edited yet.	ఈ రకమైన స్కాన్‌ను ఇంకా సవరించలేము.
+	This page has no sample of:	ఈ పేజీలో దీని నమూనా లేదు:
+	This scan couldn't be read.	ఈ స్కాన్‌ను చదవలేకపోయాం.
+	This scan is too large to edit.	ఈ స్కాన్ సవరించడానికి చాలా పెద్దది.
+	This scanned page has no text layer yet.	ఈ స్కాన్ చేసిన పేజీకి ఇంకా వచన పొర లేదు.
+	Try a shorter word, or one without tall or descending letters.	చిన్న పదాన్ని, లేదా పొడవైన, కిందకు దిగే అక్షరాలు లేని పదాన్ని ప్రయత్నించండి.
+	Type the corrected text; the preview shows the real result.	సరిదిద్దిన వచనాన్ని టైప్ చేయండి; ముందుచూపు నిజమైన ఫలితాన్ని చూపుతుంది.
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	పేజీలో ఇంకెక్కడైనా ఉన్న అక్షరాలను వాడండి; ఉచ్చారణ గుర్తు పేజీలో ఎక్కడైనా ఉంటే ఆ గుర్తు ఉన్న అక్షరాలను కూర్చవచ్చు.
+	rewritten without loss	నష్టం లేకుండా తిరిగి రాశాం

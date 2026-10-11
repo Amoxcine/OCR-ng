@@ -2194,3 +2194,33 @@ key	Space	Szóköz
 	Resize panel window	Panelablak átméretezése
 	Tools	Eszközök
 	Inspector	Tulajdonságvizsgáló
+# Edit text on scanned pages
+	Show original	Eredeti megjelenítése
+	Borrowed or composed letters:	Kölcsönzött vagy összerakott betűk:
+	Check the result closely.	Gondosan ellenőrizze az eredményt.
+	Composing the preview…	Előnézet készítése…
+	Edit scanned text	Beolvasott szöveg szerkesztése
+	Editing it could leave traces of the old letters, so it was not done.	A szerkesztés nyomot hagyhatott volna a régi betűkből, ezért nem történt meg.
+	Letters from this page, style	Betűk erről az oldalról, stílus
+	Other pages show the same scan; they keep the original.	Más oldalak is ugyanezt a beolvasott képet mutatják; azokon az eredeti marad.
+	Reading the scan…	A beolvasott kép olvasása…
+	Recognize its text first.	Előbb ismertesse fel a szövegét.
+	Scan size:	A beolvasott kép mérete:
+	Shorten it: paragraphs can't be reflowed yet.	Rövidítse le: a bekezdések újratördelése még nem lehetséges.
+	Spacing was adjusted to fit the line.	A térközt módosítottuk, hogy elférjen a sorban.
+	The edit failed a safety check and was not made.	A szerkesztés nem ment át egy biztonsági ellenőrzésen, ezért nem történt meg.
+	The letters of this text couldn't be told apart reliably.	Ennek a szövegnek a betűit nem sikerült megbízhatóan szétválasztani.
+	The new letters would touch a neighbouring line.	Az új betűk hozzáérnének egy szomszédos sorhoz.
+	The new text doesn't fit on this line.	Az új szöveg nem fér el ebben a sorban.
+	The page is unchanged.	Az oldal nem változott.
+	The paper behind this line is textured: check the erased area.	A sor mögötti papír mintázott: ellenőrizze a törölt területet.
+	The text is unchanged.	A szöveg nem változott.
+	This kind of scan can't be edited yet.	Ez a fajta beolvasott kép még nem szerkeszthető.
+	This page has no sample of:	Ezen az oldalon nincs minta ehhez:
+	This scan couldn't be read.	A beolvasott kép nem olvasható.
+	This scan is too large to edit.	A beolvasott kép túl nagy a szerkesztéshez.
+	This scanned page has no text layer yet.	Ennek a beolvasott oldalnak még nincs szövegrétege.
+	Try a shorter word, or one without tall or descending letters.	Próbáljon rövidebb szót, vagy olyat, amelyben nincsenek magas és lenyúló betűk.
+	Type the corrected text; the preview shows the real result.	Írja be a javított szöveget; az előnézet a valódi eredményt mutatja.
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Használjon olyan betűket, amelyek máshol szerepelnek az oldalon; az ékezetes betűk összerakhatók, ha az ékezet valahol szerepel az oldalon.
+	rewritten without loss	veszteség nélkül újraírva

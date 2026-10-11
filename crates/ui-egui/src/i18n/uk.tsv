@@ -2217,3 +2217,33 @@ key	Space	Пробіл
 	Panels	Панелі
 	Resize panels	Змінити розмір панелей
 	Resize panel window	Змінити розмір вікна панелі
+# Edit text on scanned pages
+	Show original	Показати оригінал
+	Borrowed or composed letters:	Запозичені або складені літери:
+	Check the result closely.	Уважно перевірте результат.
+	Composing the preview…	Створюється попередній перегляд…
+	Edit scanned text	Змінити відсканований текст
+	Editing it could leave traces of the old letters, so it was not done.	Зміна могла залишити сліди старих літер, тому її не виконано.
+	Letters from this page, style	Літери з цієї сторінки, стиль
+	Other pages show the same scan; they keep the original.	Інші сторінки показують той самий скан; на них залишається оригінал.
+	Reading the scan…	Читання скану…
+	Recognize its text first.	Спочатку розпізнайте його текст.
+	Scan size:	Розмір скану:
+	Shorten it: paragraphs can't be reflowed yet.	Скоротіть його: перекомпонування абзаців поки не підтримується.
+	Spacing was adjusted to fit the line.	Інтервали змінено, щоб текст помістився в рядок.
+	The edit failed a safety check and was not made.	Зміна не пройшла перевірку безпеки й не виконана.
+	The letters of this text couldn't be told apart reliably.	Не вдалося надійно розділити літери цього тексту.
+	The new letters would touch a neighbouring line.	Нові літери торкнулися б сусіднього рядка.
+	The new text doesn't fit on this line.	Новий текст не вміщується в цей рядок.
+	The page is unchanged.	Сторінку не змінено.
+	The paper behind this line is textured: check the erased area.	Папір за цим рядком має фактуру: перевірте стерту ділянку.
+	The text is unchanged.	Текст не змінився.
+	This kind of scan can't be edited yet.	Такий скан поки не можна змінити.
+	This page has no sample of:	На цій сторінці немає зразка для:
+	This scan couldn't be read.	Не вдалося прочитати цей скан.
+	This scan is too large to edit.	Цей скан завеликий для зміни.
+	This scanned page has no text layer yet.	Ця відсканована сторінка ще не має текстового шару.
+	Try a shorter word, or one without tall or descending letters.	Спробуйте коротше слово або слово без високих літер і виносних елементів.
+	Type the corrected text; the preview shows the real result.	Введіть виправлений текст; попередній перегляд показує справжній результат.
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Використовуйте літери, які є деінде на сторінці; літери з діакритикою можна скласти, якщо знак є десь на сторінці.
+	rewritten without loss	перезаписано без втрат

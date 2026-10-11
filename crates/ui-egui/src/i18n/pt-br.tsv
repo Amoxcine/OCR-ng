@@ -2197,3 +2197,33 @@ key	Space	Espaço
 	Resize panel window	Redimensionar janela do painel
 	Tools	Ferramentas
 	Inspector	Inspetor
+# Edit text on scanned pages
+	Show original	Mostrar original
+	Borrowed or composed letters:	Letras emprestadas ou compostas:
+	Check the result closely.	Confira o resultado com atenção.
+	Composing the preview…	Compondo a prévia…
+	Edit scanned text	Editar texto digitalizado
+	Editing it could leave traces of the old letters, so it was not done.	A edição poderia deixar vestígios das letras antigas, por isso não foi feita.
+	Letters from this page, style	Letras desta página, estilo
+	Other pages show the same scan; they keep the original.	Outras páginas mostram a mesma digitalização; elas mantêm o original.
+	Reading the scan…	Lendo a digitalização…
+	Recognize its text first.	Reconheça primeiro o texto dela.
+	Scan size:	Tamanho da digitalização:
+	Shorten it: paragraphs can't be reflowed yet.	Encurte-o: os parágrafos ainda não podem ser recompostos.
+	Spacing was adjusted to fit the line.	O espaçamento foi ajustado para caber na linha.
+	The edit failed a safety check and was not made.	A edição não passou em uma verificação de segurança e não foi feita.
+	The letters of this text couldn't be told apart reliably.	Não foi possível separar com confiança as letras deste texto.
+	The new letters would touch a neighbouring line.	As novas letras tocariam uma linha vizinha.
+	The new text doesn't fit on this line.	O novo texto não cabe nesta linha.
+	The page is unchanged.	A página não foi alterada.
+	The paper behind this line is textured: check the erased area.	O papel atrás desta linha tem textura: confira a área apagada.
+	The text is unchanged.	O texto não mudou.
+	This kind of scan can't be edited yet.	Este tipo de digitalização ainda não pode ser editado.
+	This page has no sample of:	Esta página não tem nenhum exemplo de:
+	This scan couldn't be read.	Não foi possível ler esta digitalização.
+	This scan is too large to edit.	Esta digitalização é grande demais para editar.
+	This scanned page has no text layer yet.	Esta página digitalizada ainda não tem camada de texto.
+	Try a shorter word, or one without tall or descending letters.	Tente uma palavra mais curta, ou sem letras altas ou descendentes.
+	Type the corrected text; the preview shows the real result.	Digite o texto corrigido; a prévia mostra o resultado real.
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Use letras que aparecem em outra parte da página; letras acentuadas podem ser compostas quando o acento aparece em algum lugar da página.
+	rewritten without loss	regravada sem perda

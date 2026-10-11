@@ -2203,3 +2203,33 @@ key	Space	Spazio
 	Panels	Pannelli
 	Resize panels	Ridimensiona pannelli
 	Resize panel window	Ridimensiona finestra pannello
+# Edit text on scanned pages
+	Show original	Mostra originale
+	Borrowed or composed letters:	Lettere prese in prestito o composte:
+	Check the result closely.	Controlla attentamente il risultato.
+	Composing the preview…	Composizione dell'anteprima…
+	Edit scanned text	Modifica testo scansionato
+	Editing it could leave traces of the old letters, so it was not done.	La modifica potrebbe lasciare tracce delle vecchie lettere, quindi non è stata eseguita.
+	Letters from this page, style	Lettere da questa pagina, stile
+	Other pages show the same scan; they keep the original.	Altre pagine mostrano la stessa scansione; mantengono l'originale.
+	Reading the scan…	Lettura della scansione…
+	Recognize its text first.	Riconosci prima il suo testo.
+	Scan size:	Dimensione della scansione:
+	Shorten it: paragraphs can't be reflowed yet.	Accorcialo: i paragrafi non possono ancora essere ricomposti.
+	Spacing was adjusted to fit the line.	La spaziatura è stata regolata per stare nella riga.
+	The edit failed a safety check and was not made.	La modifica non ha superato un controllo di sicurezza e non è stata eseguita.
+	The letters of this text couldn't be told apart reliably.	Non è stato possibile separare in modo affidabile le lettere di questo testo.
+	The new letters would touch a neighbouring line.	Le nuove lettere toccherebbero una riga vicina.
+	The new text doesn't fit on this line.	Il nuovo testo non sta in questa riga.
+	The page is unchanged.	La pagina non è cambiata.
+	The paper behind this line is textured: check the erased area.	La carta dietro questa riga è testurizzata: controlla l'area cancellata.
+	The text is unchanged.	Il testo non è cambiato.
+	This kind of scan can't be edited yet.	Questo tipo di scansione non può ancora essere modificato.
+	This page has no sample of:	Questa pagina non ha esempi di:
+	This scan couldn't be read.	Impossibile leggere questa scansione.
+	This scan is too large to edit.	Questa scansione è troppo grande per essere modificata.
+	This scanned page has no text layer yet.	Questa pagina scansionata non ha ancora un livello di testo.
+	Try a shorter word, or one without tall or descending letters.	Prova una parola più corta, o senza lettere alte o discendenti.
+	Type the corrected text; the preview shows the real result.	Digita il testo corretto; l'anteprima mostra il risultato reale.
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Usa lettere presenti altrove nella pagina; le lettere accentate si possono comporre se l'accento compare da qualche parte nella pagina.
+	rewritten without loss	riscritta senza perdita

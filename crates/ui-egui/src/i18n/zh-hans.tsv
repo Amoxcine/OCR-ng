@@ -2160,3 +2160,33 @@ key	Space	空格
 	Resize panel window	调整面板窗口大小
 	Tools	工具
 	Inspector	检查器
+# Edit text on scanned pages
+	Show original	显示原图
+	Borrowed or composed letters:	借用或合成的字母:
+	Check the result closely.	请仔细检查结果。
+	Composing the preview…	正在生成预览…
+	Edit scanned text	编辑扫描文本
+	Editing it could leave traces of the old letters, so it was not done.	此编辑可能留下旧字母的痕迹,因此未执行。
+	Letters from this page, style	来自本页的字母,样式
+	Other pages show the same scan; they keep the original.	其他页面显示同一扫描图像;它们保持原样。
+	Reading the scan…	正在读取扫描图像…
+	Recognize its text first.	请先识别其文本。
+	Scan size:	扫描图像大小:
+	Shorten it: paragraphs can't be reflowed yet.	请缩短:暂不支持重新排列段落。
+	Spacing was adjusted to fit the line.	已调整间距以适合该行。
+	The edit failed a safety check and was not made.	编辑未通过安全检查,未执行。
+	The letters of this text couldn't be told apart reliably.	无法可靠地分开此文本的字母。
+	The new letters would touch a neighbouring line.	新字母会碰到相邻的行。
+	The new text doesn't fit on this line.	新文本放不进这一行。
+	The page is unchanged.	页面未更改。
+	The paper behind this line is textured: check the erased area.	此行背后的纸张有纹理:请检查擦除区域。
+	The text is unchanged.	文本未更改。
+	This kind of scan can't be edited yet.	暂时无法编辑这种扫描图像。
+	This page has no sample of:	此页面没有以下字母的样本:
+	This scan couldn't be read.	无法读取此扫描图像。
+	This scan is too large to edit.	此扫描图像太大,无法编辑。
+	This scanned page has no text layer yet.	此扫描页面还没有文本层。
+	Try a shorter word, or one without tall or descending letters.	请尝试更短的单词,或不含高字母和下伸字母的单词。
+	Type the corrected text; the preview shows the real result.	输入更正后的文本;预览显示真实结果。
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	请使用页面其他地方出现的字母;如果重音符号出现在页面某处,就可以合成带重音的字母。
+	rewritten without loss	已无损重写

@@ -2196,3 +2196,33 @@ key	Space	Leertaste
 	Resize panel window	Größe des Bereichsfensters ändern
 	Tools	Werkzeuge
 	Inspector	Inspektor
+# Edit text on scanned pages
+	Show original	Original anzeigen
+	Borrowed or composed letters:	Entlehnte oder zusammengesetzte Buchstaben:
+	Check the result closely.	Prüfen Sie das Ergebnis genau.
+	Composing the preview…	Vorschau wird erstellt…
+	Edit scanned text	Gescannten Text bearbeiten
+	Editing it could leave traces of the old letters, so it was not done.	Die Änderung könnte Spuren der alten Buchstaben hinterlassen und wurde daher nicht ausgeführt.
+	Letters from this page, style	Buchstaben von dieser Seite, Stil
+	Other pages show the same scan; they keep the original.	Andere Seiten zeigen denselben Scan; sie behalten das Original.
+	Reading the scan…	Scan wird gelesen…
+	Recognize its text first.	Erkennen Sie zuerst seinen Text.
+	Scan size:	Scangröße:
+	Shorten it: paragraphs can't be reflowed yet.	Kürzen Sie ihn: Absätze können noch nicht neu umbrochen werden.
+	Spacing was adjusted to fit the line.	Der Abstand wurde angepasst, damit es in die Zeile passt.
+	The edit failed a safety check and was not made.	Die Änderung hat eine Sicherheitsprüfung nicht bestanden und wurde nicht ausgeführt.
+	The letters of this text couldn't be told apart reliably.	Die Buchstaben dieses Textes ließen sich nicht zuverlässig trennen.
+	The new letters would touch a neighbouring line.	Die neuen Buchstaben würden eine benachbarte Zeile berühren.
+	The new text doesn't fit on this line.	Der neue Text passt nicht in diese Zeile.
+	The page is unchanged.	Die Seite ist unverändert.
+	The paper behind this line is textured: check the erased area.	Das Papier hinter dieser Zeile ist strukturiert: Prüfen Sie den gelöschten Bereich.
+	The text is unchanged.	Der Text ist unverändert.
+	This kind of scan can't be edited yet.	Diese Art von Scan kann noch nicht bearbeitet werden.
+	This page has no sample of:	Diese Seite enthält kein Beispiel für:
+	This scan couldn't be read.	Dieser Scan konnte nicht gelesen werden.
+	This scan is too large to edit.	Dieser Scan ist zu groß zum Bearbeiten.
+	This scanned page has no text layer yet.	Diese gescannte Seite hat noch keine Textebene.
+	Try a shorter word, or one without tall or descending letters.	Versuchen Sie ein kürzeres Wort oder eines ohne hohe Buchstaben und Unterlängen.
+	Type the corrected text; the preview shows the real result.	Geben Sie den korrigierten Text ein; die Vorschau zeigt das echte Ergebnis.
+	Use letters that appear elsewhere on the page; accented letters can be composed when the accent appears somewhere on it.	Verwenden Sie Buchstaben, die anderswo auf der Seite vorkommen; Buchstaben mit Akzent lassen sich zusammensetzen, wenn der Akzent irgendwo auf der Seite steht.
+	rewritten without loss	verlustfrei neu geschrieben
