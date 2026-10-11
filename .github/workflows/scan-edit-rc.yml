@@ -6,12 +6,15 @@
 # the OCR models are fetched by `cargo xtask models` (pinned by SHA-256 in ATTRIBUTION.toml) and
 # shipped beside the program, as in upstream releases, with their attribution files.
 #
-# Runs on a tag `scan-edit-rc*` (publishes a pre-release with the builds) or by hand (builds only).
+# Runs on a tag `scan-edit-rc*`, or on a push to a branch `release/scan-edit-rc*` (for pushers
+# that can't push tags: the pre-release then creates the tag `scan-edit-rc*` at that commit),
+# and publishes a pre-release with the builds; or by hand (builds only).
 name: Scan edit RC
 
 on:
   push:
     tags: ['scan-edit-rc*']
+    branches: ['release/scan-edit-rc*']
   workflow_dispatch:
 
 permissions:
@@ -124,7 +127,7 @@ jobs:
 
   release:
     name: Pre-release
-    if: startsWith(github.ref, 'refs/tags/scan-edit-rc')
+    if: startsWith(github.ref, 'refs/tags/scan-edit-rc') || startsWith(github.ref, 'refs/heads/release/scan-edit-rc')
     needs: [windows-x64, linux-x86_64]
     runs-on: ubuntu-latest
     permissions:
@@ -139,7 +142,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          notes="docs/scan-edit/RELEASE-NOTES-${GITHUB_REF_NAME}.md"
+          tag="${GITHUB_REF_NAME#release/}"
+          notes="docs/scan-edit/RELEASE-NOTES-${tag}.md"
           [ -f "$notes" ] || notes="docs/scan-edit/STATUS.md"
-          gh release create "$GITHUB_REF_NAME" artifacts/* --prerelease --title "$GITHUB_REF_NAME — scan editing release candidate (unsigned)" --notes-file "$notes" --repo "$GITHUB_REPOSITORY" \
-            || gh release upload "$GITHUB_REF_NAME" artifacts/* --clobber --repo "$GITHUB_REPOSITORY"
+          gh release create "$tag" artifacts/* --target "$GITHUB_SHA" --prerelease --title "$tag — scan editing release candidate (unsigned)" --notes-file "$notes" --repo "$GITHUB_REPOSITORY" \
+            || gh release upload "$tag" artifacts/* --clobber --repo "$GITHUB_REPOSITORY"
