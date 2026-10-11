@@ -48,6 +48,9 @@ pub struct Report {
     /// What writing the scan back costs: bytes of the rewritten parts before and after.
     pub bytes_before: usize,
     pub bytes_after: usize,
+    /// Letters the line's style had no sample of: borrowed from another style or composed
+    /// (base letter and diacritic).
+    pub borrowed: Vec<String>,
     /// Parts that were stored with loss (JPEG, JPEG 2000) or as fax/JBIG2 and are rewritten
     /// without loss, by codec name.
     pub reencoded: Vec<String>,
@@ -68,18 +71,20 @@ struct Composed {
     width: f64,
 }
 
-fn compose_word(word: &str, bank: &Bank, track: f64) -> Composed {
+fn compose_word(word: &str, bank: &Bank, track: f64, spacing: &dyn Fn(char) -> char) -> Composed {
     let mut letters = Vec::new();
     let mut prev: Option<(char, f64)> = None;
     for ch in word.chars() {
+        // Composed letters are spaced as their base letter.
+        let sc = spacing(ch);
         let centre = match prev {
-            Some((p, c)) => c + bank.advance(p, ch) + track,
-            None => bank.left(ch),
+            Some((p, c)) => c + bank.advance(spacing(p), sc) + track,
+            None => bank.left(sc),
         };
         letters.push((ch, centre));
         prev = Some((ch, centre));
     }
-    let width = prev.map_or(0.0, |(c, x)| x + bank.right(c));
+    let width = prev.map_or(0.0, |(c, x)| x + bank.right(spacing(c)));
     Composed { letters, width }
 }
 
@@ -89,6 +94,9 @@ fn scale_for(to: f64, from: f64) -> f64 {
     let k = to / from.max(1e-6);
     if (k - 1.0).abs() <= 0.03 || !k.is_finite() { 1.0 } else { k.clamp(0.5, 2.0) }
 }
+
+/// A new word's letters: each one's sample and ink centre.
+type Drawn<'a> = Vec<(std::borrow::Cow<'a, Sample>, f64)>;
 
 /// Distance of `v` to the nearest whole number.
 fn off_grid(v: f64) -> f64 {
@@ -166,7 +174,14 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
     if p == no && p == nn {
         return Err(ScanError::Unchanged);
     }
-    let missing: BTreeSet<char> = new_words.get(p..nn - s).unwrap_or(&[]).iter().flat_map(|w| w.chars()).filter(|c| !bank.has(*c)).collect();
+    let mut origins: std::collections::HashMap<char, crate::borrow::Origin> = std::collections::HashMap::new();
+    for c in new_words.get(p..nn - s).unwrap_or(&[]).iter().flat_map(|w| w.chars()) {
+        if let Some(o) = crate::borrow::origin(an, &an.marks, line.style, c) {
+            origins.insert(c, o);
+        }
+    }
+    let missing: BTreeSet<char> =
+        new_words.get(p..nn - s).unwrap_or(&[]).iter().flat_map(|w| w.chars()).filter(|c| !origins.contains_key(c)).collect();
     if !missing.is_empty() {
         return Err(ScanError::MissingGlyphs(missing.into_iter().collect()));
     }
@@ -259,7 +274,7 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
                 }
                 Unit::New(i) => {
                     let word = new_words.get(*i).copied().unwrap_or("");
-                    let c = compose_word(word, bank, t);
+                    let c = compose_word(word, bank, t, &|c| crate::borrow::spacing_char(an, line.style, c));
                     widths.push(c.width);
                     composed.push(Some(c));
                 }
@@ -305,7 +320,7 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
     // Samples for the new letters, now that their places are known.
     let mut rng = Rng::new(seed);
     let mut used = Vec::new();
-    let mut drawn: Vec<Option<Vec<(&Sample, f64)>>> = Vec::new();
+    let mut drawn: Vec<Option<Drawn>> = Vec::new();
     for ((_, ux), c) in placed.iter().zip(&composed) {
         let Some(c) = c else {
             drawn.push(None);
@@ -320,7 +335,16 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
                 let phase = if k == 1.0 { off_grid(at - s.cx).hypot(off_grid(line.baseline_at(at) + s.top)) } else { 0.5 };
                 phase + 6.0 * (line.x_height / s.x_height.max(1e-6)).ln().abs()
             };
-            let s = bank.choose(ch, li, &mut used, &mut rng, misfit).ok_or_else(|| ScanError::MissingGlyphs(ch.to_string()))?;
+            let origin = origins.get(&ch).copied().unwrap_or(crate::borrow::Origin::Own);
+            let mut pick = crate::borrow::Picker { near_line: li, used: &mut used, rng: &mut rng, misfit: &misfit };
+            let s = crate::borrow::sample_for(an, origin, ch, line.style, &mut pick).ok_or_else(|| ScanError::MissingGlyphs(ch.to_string()))?;
+            match origin {
+                crate::borrow::Origin::Own => {}
+                crate::borrow::Origin::Style(st) => report.borrowed.push(format!("'{ch}' from another style on the page (style {})", st + 1)),
+                crate::borrow::Origin::Composed { base, mark, .. } => {
+                    report.borrowed.push(format!("'{ch}' composed from '{base}' and a {} found on the page", mark.name()))
+                }
+            }
             letters.push((s, centre));
         }
         drawn.push(Some(letters));
@@ -348,9 +372,9 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
             }),
             (Unit::New(i), Some(c)) => {
                 let k = |s: &Sample| scale_for(line.x_height, s.x_height);
-                let ink = |(s, centre): &(&Sample, f64)| ux + centre - (s.cx + s.left) * k(s);
+                let ink = |(s, centre): &(std::borrow::Cow<Sample>, f64)| ux + centre - (s.cx + s.left) * k(s);
                 let x0 = c.iter().map(ink).fold(f64::MAX, f64::min);
-                let x1 = c.iter().map(|l| ink(l) + l.0.ink_width * k(l.0)).fold(f64::MIN, f64::max);
+                let x1 = c.iter().map(|l| ink(l) + l.0.ink_width * k(&l.0)).fold(f64::MIN, f64::max);
                 new_words.get(*i).map(|w| (w.to_string(), [x0, x1]))
             }
             _ => None,

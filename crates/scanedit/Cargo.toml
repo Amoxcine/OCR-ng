@@ -22,6 +22,9 @@ thiserror = { workspace = true }
 # Decodes JPEG, JPEG 2000, CCITT and JBIG2 scans with the renderer's own codecs (already in the
 # tree through pdfcraft-render).
 hayro-syntax = { workspace = true }
+# The fixture generator writes JPEG scans like office scanners do (already in the tree through
+# pdfcraft-engine).
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 
 [dev-dependencies]
 # Writes before/after crops when SCANEDIT_DUMP names a folder (tests only); already in the tree.

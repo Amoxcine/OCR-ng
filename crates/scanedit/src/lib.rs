@@ -16,6 +16,7 @@
 
 pub mod analysis;
 pub mod bank;
+pub mod borrow;
 pub mod compose;
 pub mod inpaint;
 pub mod raster;

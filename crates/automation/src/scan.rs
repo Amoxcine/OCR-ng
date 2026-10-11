@@ -62,6 +62,7 @@ impl Automation {
             "bytes_before": r.bytes_before,
             "bytes_after": r.bytes_after,
             "rewritten_without_loss": r.reencoded,
+            "borrowed": r.borrowed,
         }))
     }
 

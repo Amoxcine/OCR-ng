@@ -498,3 +498,103 @@ fn underlines_are_kept_whole() {
     assert!(dark(&after) + 2 >= dark(&before), "underline pixels {} → {}", dark(&before), dark(&after));
     assert_eq!(changed_outside(&before, &after, e.report.zone), 0);
 }
+
+/// Real scans: JPEG, palette, CMYK, stacked strips and `/Rotate` pages all edit, with D1 held on
+/// the decoded samples after a save and reopen, and the size cost announced before the edit.
+#[test]
+fn every_storage_edits_with_decoded_pixels_kept() {
+    use crate::synth::Storage;
+    let cases: Vec<(&str, Spec)> = vec![
+        ("jpeg grey", Spec { storage: Storage::Jpeg(85), ..paragraph() }),
+        ("jpeg colour", Spec { storage: Storage::Jpeg(80), color: true, ink: [0.1, 0.15, 0.55], ..paragraph() }),
+        ("indexed", Spec { storage: Storage::Indexed, ..paragraph() }),
+        ("cmyk", Spec { storage: Storage::Cmyk, color: true, ..paragraph() }),
+        ("strips", Spec { strips: 3, ..paragraph() }),
+        ("rotated", Spec { rotate: 90, ..paragraph() }),
+    ];
+    for (name, spec) in cases {
+        let (_, mut doc) = fixture(&spec);
+        let an = analyze(&doc, 0).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert_eq!(an.lines.len(), 3, "{name}");
+        if name == "strips" {
+            assert_eq!(an.scan.parts.len(), 3, "{name}");
+        }
+        let target = Target::Find { text: "three".into(), occurrence: 0 };
+        let (_, report) = preview(&an, &target, "seven", &Options::default()).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert!(report.bytes_after > 0, "{name}: size not announced");
+        if name.starts_with("jpeg") {
+            assert_eq!(report.reencoded, vec!["JPEG".to_string()], "{name}");
+        }
+        let before = an.scan.raster.clone();
+        let old_parts: Vec<Vec<u8>> = an
+            .scan
+            .parts
+            .iter()
+            .map(|p| match &*doc.get(p.object) {
+                pdfcraft_cos::Object::Stream(s) => s.raw.to_vec(),
+                _ => Vec::new(),
+            })
+            .collect();
+        let e = replace_text(&mut doc, 0, &target, "seven", &Options::default()).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let saved = write_full(&doc, &SaveOptions::default()).unwrap();
+        let back = Document::open(Arc::new(saved.clone())).unwrap();
+        let after = source::find(&back, 0).unwrap();
+        assert_eq!(changed_outside(&before, &after.raster, e.report.zone), 0, "{name}: pixels changed outside the zone");
+        assert_ne!(before, after.raster, "{name}: nothing changed");
+        // The rewritten parts' old data is gone from the file (decision D5), JPEG included.
+        let rewritten: Vec<&Vec<u8>> = old_parts.iter().filter(|raw| raw.len() > 64).collect();
+        let changed_any = rewritten.iter().any(|raw| !saved.windows(64).any(|w| w == &raw[raw.len() / 2..raw.len() / 2 + 64]));
+        assert!(changed_any, "{name}: the old scan data is still in the file");
+        let text: Vec<String> = pdfcraft_edit::text_lines(&back, 0).unwrap().into_iter().map(|l| l.text).collect();
+        assert!(text.iter().any(|t| t.contains("seven")), "{name}: {text:?}");
+        if name == "indexed" {
+            assert!(matches!(after.parts[0].model, ColorModel::Indexed { .. }), "{name}: stays a palette image");
+        }
+        if name == "cmyk" {
+            assert_eq!(after.parts[0].model, ColorModel::Cmyk, "{name}: stays CMYK");
+        }
+    }
+}
+
+/// Criterion 4: French accented letters compose from a base letter of the line's style and a
+/// diacritic found elsewhere on the page, and the edit says so.
+#[test]
+fn french_accents_compose_from_the_page() {
+    let spec = Spec {
+        lines: vec![
+            "En bref le directeur a sign\u{e9} la lettre".into(),
+            "Merci de passer au secr\u{e9}tariat avec un gar\u{e7}on".into(),
+            "pour retirer le dossier avant midi".into(),
+        ],
+        page: (380.0, 170.0),
+        dpi: 300.0,
+        ..Spec::default()
+    };
+    let (f, mut doc) = fixture(&spec);
+    let an = analyze(&doc, 0).unwrap();
+    assert_eq!(an.lines[2].text, "pour retirer le dossier avant midi");
+    assert_eq!(an.lines[1].text, "Merci de passer au secr\u{e9}tariat avec un gar\u{e7}on");
+    // Line 3 has no é, ç, ë or É of its own.
+    // é and ç exist elsewhere on the page: real samples. ë (no diaeresis anywhere: two i dots)
+    // and É (no accented capital: E and the acute of é) are composed, and reported.
+    let cases = [("dossier", "d\u{e9}pit", false), ("dossier", "re\u{e7}u", false), ("midi", "no\u{eb}l", true), ("pour", "\u{c9}t\u{e9}", true)];
+    for (find, with, composed) in cases {
+        let target = Target::Find { text: find.into(), occurrence: 0 };
+        let (_, report) = preview(&an, &target, with, &Options::default()).unwrap_or_else(|e| panic!("{with}: {e}"));
+        assert_eq!(report.borrowed.iter().any(|b| b.contains("composed")), composed, "{with}: {:?}", report.borrowed);
+    }
+    // ô has no circumflex anywhere on the page: refused, naming the letter.
+    let e = preview(&an, &Target::Find { text: "dossier".into(), occurrence: 0 }, "h\u{f4}tel", &Options::default()).unwrap_err();
+    assert!(matches!(e, ScanError::MissingGlyphs(ref m) if m.contains('\u{f4}')), "{e}");
+    // Composed é against the page printed with a real é.
+    let before = an.scan.raster.clone();
+    let e = replace_text(&mut doc, 0, &Target::Find { text: "midi".into(), occurrence: 0 }, "no\u{eb}l", &Options::default()).unwrap();
+    let after = source::find(&doc, 0).unwrap().raster;
+    assert_eq!(changed_outside(&before, &after, e.report.zone), 0);
+    let truth = f.with_line(2, "pour retirer le dossier avant no\u{eb}l").unwrap();
+    dump3("accent", &before, &after, &truth.raster, e.report.zone);
+    let score = ssim(&after, &truth.raster, e.report.zone);
+    assert!(score > 0.8, "SSIM {score}");
+    let text: Vec<String> = pdfcraft_edit::text_lines(&doc, 0).unwrap().into_iter().map(|l| l.text).collect();
+    assert!(text.iter().any(|t| t.contains("no\u{eb}l")), "{text:?}");
+}

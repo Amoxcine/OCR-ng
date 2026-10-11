@@ -23,8 +23,10 @@ pub struct Sample {
     pub ink_width: f64,
     /// The ink's α-weighted horizontal centre, from the box's left edge.
     pub cx: f64,
-    /// The x-height of the line it comes from (samples are scaled to the target line's).
+    /// The x-height and cap height of the line it comes from (samples are scaled to the
+    /// target line's).
     pub x_height: f64,
+    pub cap_height: f64,
     pub line: usize,
     pub glyph: usize,
     pub confidence: f32,
@@ -432,6 +434,7 @@ fn sample_of(line: &Line, li: usize, gi: usize, m: &Matte, halo: usize) -> Optio
     Some(Sample {
         cx: sum / mass,
         x_height: line.x_height,
+        cap_height: line.cap_height,
         ch: g.ch,
         alpha: a,
         ink,

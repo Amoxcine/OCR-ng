@@ -151,6 +151,8 @@ pub struct Analysis {
     pub blocks: Vec<Block>,
     pub styles: Vec<Style>,
     pub(crate) banks: Vec<Bank>,
+    /// Diacritics captured on the page, for composing accented letters.
+    pub(crate) marks: crate::borrow::Marks,
     /// Text-layer lines that were not found in the scan (visible text, or labels off the ink).
     pub unmatched: Vec<String>,
 }
@@ -873,11 +875,12 @@ pub fn analyze(doc: &Document, page: usize) -> Result<Analysis, ScanError> {
     let blocks = blocks(&mut lines);
     let styles = styles(&mut lines);
     let samples = crate::raster::par_map(&lines, |li, line| crate::bank::line_samples(&scan.raster, line, li));
-    let banks = styles.iter().enumerate().map(|(si, _)| Bank::build(&lines, si, &samples)).collect();
+    let banks: Vec<Bank> = styles.iter().enumerate().map(|(si, _)| Bank::build(&lines, si, &samples)).collect();
     if timing {
         eprintln!("scanedit: banks {:?}", t.elapsed());
     }
-    Ok(Analysis { scan, lines, blocks, styles, banks, unmatched })
+    let marks = crate::borrow::marks(&banks);
+    Ok(Analysis { scan, lines, blocks, styles, banks, marks, unmatched })
 }
 
 #[cfg(test)]

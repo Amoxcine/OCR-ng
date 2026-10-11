@@ -34,6 +34,19 @@ impl Default for Degrade {
     }
 }
 
+/// How the scan is stored in the PDF.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Storage {
+    /// 8-bit samples, Flate (or 1-bit when the damage makes it black and white).
+    Flate,
+    /// JPEG at this quality, as office scanners write.
+    Jpeg(u8),
+    /// A 16-entry palette, 4 bits per pixel.
+    Indexed,
+    /// CMYK samples.
+    Cmyk,
+}
+
 /// A page of text to scan.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Spec {
@@ -62,6 +75,11 @@ pub struct Spec {
     pub layer_lines: Option<Vec<String>>,
     /// Lines with an underline (touching the descenders).
     pub underline: Vec<usize>,
+    pub storage: Storage,
+    /// The scan in this many horizontal strips, each its own image (1: one image).
+    pub strips: usize,
+    /// The page's `/Rotate`.
+    pub rotate: i64,
 }
 
 impl Default for Spec {
@@ -82,6 +100,9 @@ impl Default for Spec {
             text_layer: true,
             layer_lines: None,
             underline: Vec::new(),
+            storage: Storage::Flate,
+            strips: 1,
+            rotate: 0,
         }
     }
 }
@@ -123,8 +144,22 @@ fn num(v: f64) -> String {
     if s == "-0" || s.is_empty() { "0".into() } else { s.into() }
 }
 
+/// A PDF literal string for `text` in WinAnsi, bytes above ASCII written as octal escapes (the
+/// content is built as text).
 fn literal(text: &str) -> String {
-    String::from_utf8_lossy(&pdfcraft_fonts::literal(&pdfcraft_fonts::win_ansi(text))).into_owned()
+    let mut out = String::from("(");
+    for b in pdfcraft_fonts::win_ansi(text) {
+        match b {
+            b'(' | b')' | b'\\' => {
+                out.push('\\');
+                out.push(char::from(b));
+            }
+            0x20..=0x7e => out.push(char::from(b)),
+            _ => out.push_str(&format!("\\{b:03o}")),
+        }
+    }
+    out.push(')');
+    out
 }
 
 /// The text as content: `invisible` for the text layer.
@@ -183,7 +218,7 @@ fn helvetica() -> Dict {
 }
 
 /// A one-page document: `content` with font /F1 and the given XObjects.
-fn one_page(size: (f64, f64), content: &str, xobjects: Vec<(&str, Stream)>) -> Result<Vec<u8>, ScanError> {
+fn one_page(size: (f64, f64), content: &str, xobjects: Vec<(String, Stream)>, rotate: i64) -> Result<Vec<u8>, ScanError> {
     let mut doc = Document::new_empty();
     let pages = doc
         .get(doc.root().ok_or_else(|| ScanError::Internal("no root".into()))?)
@@ -208,6 +243,9 @@ fn one_page(size: (f64, f64), content: &str, xobjects: Vec<(&str, Stream)>) -> R
     page.set(b"Parent".to_vec(), Object::Ref(pages));
     page.set(b"MediaBox".to_vec(), Object::Array(vec![Object::Int(0), Object::Int(0), Object::Real(size.0), Object::Real(size.1)]));
     page.set(b"Contents".to_vec(), Object::Ref(contents));
+    if rotate != 0 {
+        page.set(b"Rotate".to_vec(), Object::Int(rotate));
+    }
     page.set(b"Resources".to_vec(), Object::Dict(res));
     let page = doc.add(page);
     doc.update_dict(pages, |d| {
@@ -293,15 +331,39 @@ pub fn degrade(r: &Raster, d: &Degrade) -> Raster {
 
 /// Make the scan for `spec`.
 pub fn generate(spec: &Spec) -> Result<Fixture, ScanError> {
-    let vector = one_page(spec.page, &text_content(spec, false), Vec::new())?;
+    let vector = one_page(spec.page, &text_content(spec, false), Vec::new(), 0)?;
     let raster = degrade(&render(&vector, spec.dpi, spec.color)?, &spec.degrade);
+    let strips = spec.strips.clamp(1, raster.height.max(1));
+    let mut images = Vec::new();
+    let mut content = String::new();
+    let mut y0 = 0;
+    for i in 0..strips {
+        let y1 = (raster.height * (i + 1)) / strips;
+        let h = y1 - y0;
+        let rows = raster.data.get(y0 * raster.width * raster.channels..y1 * raster.width * raster.channels).unwrap_or(&[]);
+        let strip = Raster::from_data(raster.width, h, raster.channels, rows.to_vec())?;
+        images.push((format!("Im{i}"), encode_image(&strip, spec)?));
+        // Strip i spans rows y0..y1 of the page, counted from the top.
+        let (top, bottom) = (spec.page.1 * (1.0 - y0 as f64 / raster.height as f64), spec.page.1 * (1.0 - y1 as f64 / raster.height as f64));
+        content.push_str(&format!("q {} 0 0 {} 0 {} cm /Im{i} Do Q\n", num(spec.page.0), num(top - bottom), num(bottom)));
+        y0 = y1;
+    }
+    let layer = if spec.text_layer { text_content(spec, true) } else { String::new() };
+    content.push_str(&layer);
+    let pdf = one_page(spec.page, &content, images, spec.rotate)?;
+    Ok(Fixture { spec: spec.clone(), pdf, raster })
+}
+
+/// One image XObject holding `raster`, stored as `spec` says.
+fn encode_image(raster: &Raster, spec: &Spec) -> Result<Stream, ScanError> {
     let mut dict = Dict::new();
     dict.set(b"Type".to_vec(), Object::name("XObject"));
     dict.set(b"Subtype".to_vec(), Object::name("Image"));
     dict.set(b"Width".to_vec(), Object::Int(raster.width as i64));
     dict.set(b"Height".to_vec(), Object::Int(raster.height as i64));
-    dict.set(b"ColorSpace".to_vec(), Object::name(if spec.color { "DeviceRGB" } else { "DeviceGray" }));
-    let image = if spec.degrade.bitonal {
+    let colour = if raster.channels == 3 { "DeviceRGB" } else { "DeviceGray" };
+    dict.set(b"ColorSpace".to_vec(), Object::name(colour));
+    if spec.degrade.bitonal {
         dict.set(b"BitsPerComponent".to_vec(), Object::Int(1));
         let row = raster.width.div_ceil(8);
         let mut bits = vec![0u8; row * raster.height];
@@ -314,15 +376,59 @@ pub fn generate(spec: &Spec) -> Result<Fixture, ScanError> {
                 }
             }
         }
-        Stream::flate(dict, &bits)
-    } else {
-        dict.set(b"BitsPerComponent".to_vec(), Object::Int(8));
-        Stream::flate(dict, &raster.data)
-    };
-    let layer = if spec.text_layer { text_content(spec, true) } else { String::new() };
-    let content = format!("q {} 0 0 {} 0 0 cm /Im0 Do Q\n{layer}", num(spec.page.0), num(spec.page.1));
-    let pdf = one_page(spec.page, &content, vec![("Im0", image)])?;
-    Ok(Fixture { spec: spec.clone(), pdf, raster })
+        return Ok(Stream::flate(dict, &bits));
+    }
+    dict.set(b"BitsPerComponent".to_vec(), Object::Int(8));
+    match spec.storage {
+        Storage::Flate => Ok(Stream::flate(dict, &raster.data)),
+        Storage::Jpeg(q) => {
+            let mut out = Vec::new();
+            let kind = if raster.channels == 3 { image::ExtendedColorType::Rgb8 } else { image::ExtendedColorType::L8 };
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, q.clamp(1, 100))
+                .encode(&raster.data, raster.width as u32, raster.height as u32, kind)
+                .map_err(|e| ScanError::Internal(e.to_string()))?;
+            dict.set(b"Filter".to_vec(), Object::name("DCTDecode"));
+            Ok(Stream::from_raw(dict, out))
+        }
+        Storage::Indexed => {
+            // 16 grey levels, 4 bits per pixel, palette in an RGB lookup string.
+            let lookup: Vec<u8> = (0..16u8).flat_map(|i| [i * 17; 3]).collect();
+            dict.set(
+                b"ColorSpace".to_vec(),
+                Object::Array(vec![
+                    Object::name("Indexed"),
+                    Object::name("DeviceRGB"),
+                    Object::Int(15),
+                    Object::String(pdfcraft_cos::PdfString::literal(lookup)),
+                ]),
+            );
+            dict.set(b"BitsPerComponent".to_vec(), Object::Int(4));
+            let row = raster.width.div_ceil(2);
+            let mut packed = vec![0u8; row * raster.height];
+            for y in 0..raster.height {
+                for x in 0..raster.width {
+                    let i = (raster.luma(x, y) / 17.0).round().clamp(0.0, 15.0) as u8;
+                    if let Some(b) = packed.get_mut(y * row + x / 2) {
+                        *b |= if x % 2 == 0 { i << 4 } else { i };
+                    }
+                }
+            }
+            Ok(Stream::flate(dict, &packed))
+        }
+        Storage::Cmyk => {
+            dict.set(b"ColorSpace".to_vec(), Object::name("DeviceCMYK"));
+            let mut data = Vec::with_capacity(raster.width * raster.height * 4);
+            for y in 0..raster.height {
+                for x in 0..raster.width {
+                    let [r, g, b] = raster.rgb(x, y).map(|v| f64::from(v) / 255.0);
+                    let k = 1.0 - r.max(g).max(b);
+                    let d = (1.0 - k).max(1e-9);
+                    data.extend([(1.0 - r - k) / d, (1.0 - g - k) / d, (1.0 - b - k) / d, k].map(|v| (v * 255.0).round().clamp(0.0, 255.0) as u8));
+                }
+            }
+            Ok(Stream::flate(dict, &data))
+        }
+    }
 }
 
 /// Mean structural similarity (Wang et al. 2004) of the luminance of `a` and `b` over `rect`,
