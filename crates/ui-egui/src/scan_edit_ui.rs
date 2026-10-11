@@ -286,14 +286,20 @@ pub(crate) fn page_input(
         Some(PageState::NotScan(_)) | None => false,
         Some(PageState::Analysing(..)) => {
             banner(ui, tl!("Reading the scan…"), None);
-            // A click now opens its line when the page is read (reading takes about a second).
+            // A click on text now opens its line when the page is read (reading takes about a
+            // second); elsewhere images and other objects stay selectable meanwhile.
             if resp.clicked()
                 && let Some(p) = resp.interact_pointer_pos()
             {
-                view.scan.click = Some((page, p));
-                return true;
+                let (vx, vy) = xf.screen_to_view(p);
+                let on_text = view
+                    .page_text(page)
+                    .is_some_and(|t| t.glyphs.iter().any(|g| vx >= g.rect[0] && vx <= g.rect[2] && vy >= g.rect[1] && vy <= g.rect[3]));
+                if on_text {
+                    view.scan.click = Some((page, p));
+                    return true;
+                }
             }
-            // Images and other objects stay selectable meanwhile.
             false
         }
         Some(PageState::Failed(_, ScanError::NoText)) => {
