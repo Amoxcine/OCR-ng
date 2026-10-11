@@ -116,9 +116,15 @@ impl Bank {
                 s.confidence = s.confidence.min(0.05);
             }
         }
+        // Letters that don't sit where their kind sits on the baseline (the line's baseline or
+        // the letter's ink was found wrong) would be drawn floating or sunk.
+        for s in bank.samples.iter_mut().filter(|s| !plausible(s)) {
+            s.confidence = s.confidence.min(0.05);
+        }
         let bad: std::collections::HashSet<(usize, usize)> =
             suspects.iter().filter_map(|&i| bank.samples.get(i).map(|s| (s.line, s.glyph))).collect();
         bank.suspect_count = bad.len();
+
         let good = |li: usize, gi: usize, g: &crate::analysis::Glyph| g.confidence >= GOOD && !bad.contains(&(li, gi));
         for s in bank.samples.iter().filter(|s| s.confidence >= GOOD) {
             width_stats.entry(s.ch).or_default().add(s.ink_width);
@@ -364,6 +370,35 @@ pub(crate) fn line_samples(raster: &Raster, line: &Line, li: usize) -> Vec<(usiz
         .filter(|(_, g)| !g.pixels.is_empty() && g.confidence > 0.0)
         .filter_map(|(gi, _)| Some((gi, sample_of(line, li, gi, &m, r, &owners)?)))
         .collect()
+}
+
+/// Whether a sample's ink spans the heights its letter has relative to the baseline: x-height
+/// letters from the baseline to the x-height, tall ones from the baseline up past it,
+/// descending ones below the baseline. Other characters (punctuation, accented letters, i and
+/// j with their dots, letters whose shape varies between fonts) are not judged.
+/// Whether [`plausible`] judges letters `c`.
+pub(crate) fn judgeable(c: char) -> bool {
+    matches!(c, 'a' | 'c' | 'e' | 'm' | 'n' | 'o' | 'r' | 's' | 'u' | 'v' | 'w' | 'x' | 'z' | 'b' | 'd' | 'h' | 'k' | 'l' | 'g' | 'p' | 'q' | 'y')
+}
+
+pub(crate) fn plausible(s: &Sample) -> bool {
+    let xh = s.x_height;
+    if !(xh.is_finite() && xh >= 3.0) {
+        return true;
+    }
+    let rows: Vec<usize> = (0..s.alpha.height).filter(|&y| (0..s.alpha.width).any(|x| s.alpha.get(x, y) >= 0.5)).collect();
+    let (Some(&r0), Some(&r1)) = (rows.first(), rows.last()) else { return false };
+    // Relative to the baseline, in x-heights (negative: above).
+    let top = (s.top + r0 as f64) / xh;
+    let bottom = (s.top + r1 as f64 + 1.0) / xh;
+    match s.ch {
+        'a' | 'c' | 'e' | 'm' | 'n' | 'o' | 'r' | 's' | 'u' | 'v' | 'w' | 'x' | 'z' => {
+            (-0.25..=0.3).contains(&bottom) && (-1.35..=-0.65).contains(&top)
+        }
+        'b' | 'd' | 'h' | 'k' | 'l' | 'A'..='I' | 'K'..='P' | 'R'..='Z' | '0'..='9' => (-0.25..=0.35).contains(&bottom) && top <= -1.05,
+        'g' | 'p' | 'q' | 'y' => bottom >= 0.15 && (-1.35..=-0.55).contains(&top),
+        _ => true,
+    }
 }
 
 /// Which glyph each ink pixel of a line belongs to, over the line's region.

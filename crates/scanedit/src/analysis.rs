@@ -155,6 +155,11 @@ pub struct Analysis {
     pub(crate) marks: crate::borrow::Marks,
     /// Text-layer lines that were not found in the scan (visible text, or labels off the ink).
     pub unmatched: Vec<String>,
+    /// Of the letters whose height tells their kind (x-height, ascending, descending), how many
+    /// the text layer names and how many of those the ink contradicts: a text layer that
+    /// doesn't describe the print (a page recognised upside down, noise read as text) shows.
+    pub(crate) labels_judged: usize,
+    pub(crate) labels_contradicted: usize,
 }
 
 impl Analysis {
@@ -783,11 +788,14 @@ pub(crate) struct Matte {
 }
 
 /// The halo around ink that anti-aliasing and blur leave (pixels).
-/// The components of a line without those reaching far above or below its ink band (the
-/// median top to the median bottom of its components): ink of the lines around it, caught when
-/// the text layer's box for this line is too tall. Accents, ascenders and descenders stay well
-/// within one band height of it. A letter touching the other line's ink then goes with it, and
-/// the word is refused rather than drawn with a piece of the other line.
+/// The components of a line without those of the lines around it, caught when the text
+/// layer's box for this line is too tall (a loose OCR box, or a box straight on the page around
+/// a scan placed at an angle). The line's letters sit on its dominant baseline (the median of
+/// the components' bottoms; descenders reach below it); small marks (dots, accents,
+/// punctuation) float between its top and its baseline. Letters of the line above end on their
+/// own baseline, at least a line's height higher; those of the line below start below this
+/// one. A letter touching the other line's ink then goes with it, and the word is refused
+/// rather than drawn with a piece of the other line.
 fn within_band(mine: Vec<Component>) -> Vec<Component> {
     if mine.len() < 3 {
         return mine;
@@ -796,7 +804,14 @@ fn within_band(mine: Vec<Component>) -> Vec<Component> {
     let mut bottoms: Vec<f64> = mine.iter().map(|c| c.bbox.y1 as f64).collect();
     let (t, b) = (median(&mut tops), median(&mut bottoms));
     let h = (b - t).max(1.0);
-    mine.into_iter().filter(|c| c.bbox.y0 as f64 >= t - h && c.bbox.y1 as f64 <= b + h).collect()
+    mine.into_iter()
+        .filter(|c| {
+            let (top, bottom, height) = (c.bbox.y0 as f64, c.bbox.y1 as f64, c.bbox.height() as f64);
+            let letter = bottom >= b - 0.25 * h && bottom <= b + 0.7 * h && top >= t - h;
+            let mark = height <= 0.6 * h && bottom >= t - 0.9 * h && bottom <= b + 0.7 * h;
+            letter || mark
+        })
+        .collect()
 }
 
 pub(crate) fn halo(x_height: f64) -> usize {
@@ -903,7 +918,9 @@ pub fn analyze(doc: &Document, page: usize) -> Result<Analysis, ScanError> {
         eprintln!("scanedit: banks {:?}", t.elapsed());
     }
     let marks = crate::borrow::marks(&mut banks);
-    Ok(Analysis { scan, lines, blocks, styles, banks, marks, unmatched })
+    let judged: Vec<bool> = banks.iter().flat_map(|b| &b.samples).filter(|s| crate::bank::judgeable(s.ch)).map(crate::bank::plausible).collect();
+    let labels_contradicted = judged.iter().filter(|p| !**p).count();
+    Ok(Analysis { scan, lines, blocks, styles, banks, marks, unmatched, labels_judged: judged.len(), labels_contradicted })
 }
 
 #[cfg(test)]

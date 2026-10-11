@@ -586,6 +586,36 @@ fn accents_the_text_layer_missed_still_compose() {
     }
 }
 
+/// Text a few pixels high (a page scanned at 72 dpi) is refused, saying why.
+#[test]
+fn text_too_small_to_edit_is_refused() {
+    let spec = Spec { dpi: 72.0, ..Spec::default() };
+    let (_, doc) = fixture(&spec);
+    let an = analyze(&doc, 0).unwrap();
+    let e = preview(&an, &Target::Find { text: "lazy".into(), occurrence: 0 }, "tame", &Options::default()).unwrap_err();
+    assert!(matches!(e, ScanError::Unsupported(ref why) if why.contains("too small")), "{e}");
+}
+
+/// A text layer that doesn't describe the printed letters (an upside-down page recognised as
+/// is gives gibberish) is not trusted: the edit is refused instead of drawing wrong letters.
+#[test]
+fn a_text_layer_that_does_not_match_the_print_is_refused() {
+    let printed: Vec<String> = vec![
+        "The quick brown fox jumps over the lazy dog.".into(),
+        "Pack my box with five dozen liquor jugs now.".into(),
+        "How vexingly quick daft zebras jump today.".into(),
+    ];
+    let layer: Vec<String> = vec!["Hl eeo nnot S i Pe uo lMd".into(), "ee Tt nn otu a Ln W".into(), "oo eon Nn ttne ae d".into()];
+    let spec = Spec { lines: printed, layer_lines: Some(layer), page: (380.0, 170.0), ..Spec::default() };
+    let (_, doc) = fixture(&spec);
+    let Ok(an) = analyze(&doc, 0) else { return };
+    for (li, l) in an.lines.iter().enumerate() {
+        let Some(w) = l.words.first() else { continue };
+        let e = preview(&an, &Target::Word { line: li, word: 0 }, &w.text.chars().rev().collect::<String>(), &Options::default());
+        assert!(e.is_err(), "line {li} {:?} was edited", l.text);
+    }
+}
+
 #[test]
 fn french_accents_compose_from_the_page() {
     let spec = Spec {

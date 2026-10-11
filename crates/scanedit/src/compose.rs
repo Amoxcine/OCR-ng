@@ -166,6 +166,31 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
     let line = an.lines.get(li).ok_or(ScanError::NoSuchLine(li))?;
     let block = an.blocks.get(line.block).ok_or(ScanError::NoSuchLine(li))?;
     let bank = an.banks.get(line.style).ok_or(ScanError::NoSuchLine(li))?;
+    // Letters a few pixels high can't be separated, matted or placed well enough to pass for
+    // print (body text scanned at 72 dpi has an x-height of about 5 pixels).
+    if line.x_height < MIN_X_HEIGHT {
+        return Err(ScanError::Unsupported(format!(
+            "the text is too small in this scan to edit ({:.0} pixels high, at least {MIN_X_HEIGHT:.0} needed: scan at 150 dpi or more)",
+            line.x_height
+        )));
+    }
+    // A text layer that doesn't describe the printed letters (recognised upside down, in the
+    // wrong language, or from noise) aligns badly almost everywhere: its labels can't be trusted.
+    // Measured on real scans: under 8 % of letters contradict the ink on well-recognised pages,
+    // over 25 % on pages recognised upside down or at too low a resolution.
+    if an.labels_judged >= 15 && an.labels_contradicted * 5 > an.labels_judged {
+        return Err(ScanError::Segmentation(format!(
+            "the page's text layer doesn't match its printed letters ({} of {} letters); recognise the text again if the page was upside down",
+            an.labels_contradicted, an.labels_judged
+        )));
+    }
+    let weak = line.glyphs.iter().filter(|g| g.confidence < 0.5).count();
+    if line.glyphs.len() >= 4 && weak * 3 > line.glyphs.len() * 2 {
+        return Err(ScanError::Segmentation(format!(
+            "the text layer doesn't match the printed letters of this line ({weak} of {} letters); recognise the text again if the page was upside down",
+            line.glyphs.len()
+        )));
+    }
     let old_words: Vec<&str> = line.words.iter().map(|w| w.text.as_str()).collect();
     let new_words: Vec<&str> = new_text.split_whitespace().collect();
     let (no, nn) = (old_words.len(), new_words.len());
@@ -383,8 +408,19 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
     }
     for &i in &removed {
         let Some(w) = line.words.get(i) else { continue };
-        if line.glyphs.get(w.glyphs.clone()).unwrap_or(&[]).iter().any(|g| g.pixels.is_empty()) {
+        let glyphs = line.glyphs.get(w.glyphs.clone()).unwrap_or(&[]);
+        if glyphs.iter().any(|g| g.pixels.is_empty()) {
             return Err(ScanError::Segmentation(format!("the ink of \"{}\" could not be told apart reliably", w.text)));
+        }
+        // A letter wholly above or below the line's band is another line's (the text layer's
+        // line spans two printed ones): erasing the word would take it too.
+        let off_line = glyphs.iter().any(|g| {
+            let b = line.baseline_at((g.bbox.x0 + g.bbox.x1) as f64 / 2.0);
+            let floats = !matches!(g.ch, '\'' | '"' | '`' | '^' | '*' | '°' | '’' | '‘' | '“' | '”' | '-' | '–' | '—' | '~');
+            floats && ((g.bbox.y1 as f64) < b - 0.5 * line.x_height || (g.bbox.y0 as f64) > b + 0.3 * line.x_height)
+        });
+        if off_line {
+            return Err(ScanError::Segmentation(format!("\"{}\" seems to run into another printed line", w.text)));
         }
     }
 
@@ -575,6 +611,19 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
         report.warnings.push("the paper behind this line is textured; check the erased area".into());
     }
 
+    // Ink that stays (other lines, this line's other words) and a pixel around it: moved words
+    // and new letters must not touch it (they'd merge with it, or the halo would stain it).
+    // (Letters only: specks of paper texture don't count.)
+    let mut stays = protected.clone();
+    for &(px, py) in &line.pixels {
+        let (ux, uy) = (px as usize, py as usize);
+        if work.contains(ux, uy) && !erase.get(ux - work.x0, uy - work.y0) {
+            stays.set(ux - work.x0, uy - work.y0, true);
+        }
+    }
+    let stays = stays.dilate(1);
+    let mut touching = 0usize;
+
     // Moved words (and the marks between them): their own ink, recomposed over the new paper.
     let movers: Vec<(&Mask, i64, i64)> = moving
         .iter()
@@ -596,6 +645,9 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
                     continue;
                 }
                 let (tx, ty) = (tx as usize, ty as usize);
+                if a >= 0.25 && stays.get(tx, ty) {
+                    touching += 1;
+                }
                 for (o, c) in out.iter_mut().zip(&m.ink) {
                     if !protected.get(tx, ty) {
                         o.set(tx, ty, c.get(x, y) + (1.0 - a) * o.get(tx, ty));
@@ -628,6 +680,9 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
                     if a <= 0.004 {
                         continue;
                     }
+                    if a >= 0.25 && stays.get(x, y) {
+                        touching += 1;
+                    }
                     for (o, ink) in out.iter_mut().zip(&s.ink) {
                         if !protected.get(x, y) {
                             o.set(x, y, ink.sample(sx, sy) + (1.0 - a) * o.get(x, y));
@@ -640,6 +695,12 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
                 report.warnings.push(format!("'{}' comes from a sample that was hard to separate from its neighbours", s.ch));
             }
         }
+    }
+
+    if touching > 0 {
+        return Err(ScanError::Collision(format!(
+            "the new letters would touch ink that stays (about {touching} pixels); try a shorter or differently shaped word"
+        )));
     }
 
     // Write back the pixels that changed.
@@ -668,6 +729,9 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
     }
     Ok((result, report))
 }
+
+/// The smallest x-height (pixels) whose text is edited.
+pub const MIN_X_HEIGHT: f64 = 7.0;
 
 /// Pixels that differ between `a` and `b` outside `zone` (decision D1's invariant).
 pub fn changed_outside(a: &Raster, b: &Raster, zone: Rect) -> usize {
