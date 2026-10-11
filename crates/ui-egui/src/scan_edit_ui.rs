@@ -73,6 +73,8 @@ pub struct ScanView {
     pub editor: Option<ScanEditor>,
     /// A page whose text should be recognised (the app runs Recognize Text on it).
     pub(crate) ocr_request: Option<usize>,
+    /// A click on a page still being read (screen position): it opens its line once ready.
+    click: Option<(usize, egui::Pos2)>,
 }
 
 impl std::fmt::Debug for ScanView {
@@ -279,6 +281,13 @@ pub(crate) fn page_input(
         Some(PageState::NotScan(_)) | None => false,
         Some(PageState::Analysing(..)) => {
             banner(ui, tl!("Reading the scan…"), None);
+            // A click now opens its line when the page is read (reading takes about a second).
+            if resp.clicked()
+                && let Some(p) = resp.interact_pointer_pos()
+            {
+                view.scan.click = Some((page, p));
+                return true;
+            }
             // Images and other objects stay selectable meanwhile.
             false
         }
@@ -300,6 +309,7 @@ pub(crate) fn page_input(
             let painter = ui.painter();
             let editing = view.scan.editor.as_ref().filter(|e| e.page == page).map(|e| e.line);
             let hover = resp.hover_pos();
+            let early = view.scan.click.take_if(|c| c.0 == page).map(|c| c.1);
             let mut clicked = None;
             let mut over_line = false;
             for li in 0..an.lines.len() {
@@ -315,6 +325,9 @@ pub(crate) fn page_input(
                         Stroke::new(if over { 1.25 } else { 0.75 }, ACCENT.gamma_multiply(alpha)),
                         egui::StrokeKind::Outside,
                     );
+                }
+                if early.is_some_and(|p| b.contains(p)) {
+                    clicked = Some(li);
                 }
                 if over {
                     over_line = true;
@@ -344,6 +357,9 @@ pub(crate) fn paint(ctx: &egui::Context, painter: &egui::Painter, xf: &PageXform
     let Some(pi) = info.pages.get(page) else { return };
     // The crop is upright in user space; the page's own rotation turns it with the page.
     xf.paint_user_image(painter, tex.id(), pi, p.rect, 0, Color32::WHITE);
+    // The line being edited stays framed over its preview.
+    let r = p.rect.map(|v| v as f32);
+    painter.rect_stroke(xf.user_rect(info, page, r).expand(2.0), CornerRadius::same(2), Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
 }
 
 /// The editor panel: the text, the state of the preview, what the edit does, and the buttons.
@@ -428,7 +444,7 @@ pub(crate) fn panel(ctx: &egui::Context, view: &mut DocView, inline: bool) -> Op
             }
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.checkbox(&mut e.show_original, tl!("Show original"));
+                ui.toggle_value(&mut e.show_original, tl!("Show original"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.add_enabled(ready && e.error.is_none(), egui::Button::new(tl!("Apply"))).clicked() {
                         apply = true;
