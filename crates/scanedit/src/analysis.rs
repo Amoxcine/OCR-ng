@@ -313,7 +313,13 @@ fn build_line(raster: &Raster, label: &Label) -> Option<Line> {
             let (cr, kr) = (c0 + cr.start..c0 + cr.end, k0 + kr.start..k0 + kr.end);
             let px = col_pixels(kr.clone());
             let bbox = kr.clone().filter_map(|i| boxes.get(i)).fold(Rect::default(), |r, b| r.union(b));
-            let ratio = (bbox.width() as f64).max(1.0) / expected.get(cr.clone()).map_or(1.0, |e| e.iter().sum::<f64>()).max(1.0);
+            let mut ratio = (bbox.width() as f64).max(1.0) / expected.get(cr.clone()).map_or(1.0, |e| e.iter().sum::<f64>()).max(1.0);
+            // A stem's ink is much narrower than its advance: narrow is normal for these.
+            if cr.len() == 1
+                && chars.get(cr.start).is_some_and(|&c| matches!(c, 'i' | 'l' | 'j' | 'I' | '1' | '!' | '|' | '\'' | '.' | ',' | ':' | ';'))
+            {
+                ratio = ratio.max(1.0);
+            }
             let (n_chars, n_cols) = (cr.len(), kr.len());
             let cap = if irregular { 0.4 } else { 1.0 };
             if n_chars == 1 {
@@ -875,11 +881,11 @@ pub fn analyze(doc: &Document, page: usize) -> Result<Analysis, ScanError> {
     let blocks = blocks(&mut lines);
     let styles = styles(&mut lines);
     let samples = crate::raster::par_map(&lines, |li, line| crate::bank::line_samples(&scan.raster, line, li));
-    let banks: Vec<Bank> = styles.iter().enumerate().map(|(si, _)| Bank::build(&lines, si, &samples)).collect();
+    let mut banks: Vec<Bank> = styles.iter().enumerate().map(|(si, _)| Bank::build(&lines, si, &samples)).collect();
     if timing {
         eprintln!("scanedit: banks {:?}", t.elapsed());
     }
-    let marks = crate::borrow::marks(&banks);
+    let marks = crate::borrow::marks(&mut banks);
     Ok(Analysis { scan, lines, blocks, styles, banks, marks, unmatched })
 }
 

@@ -558,6 +558,34 @@ fn every_storage_edits_with_decoded_pixels_kept() {
 
 /// Criterion 4: French accented letters compose from a base letter of the line's style and a
 /// diacritic found elsewhere on the page, and the edit says so.
+/// An OCR that can't read accents writes "?" or the bare letter: the diacritics are still
+/// found by their shape, lend themselves to composed letters, and the accented letters are not
+/// drawn as bare ones.
+#[test]
+fn accents_the_text_layer_missed_still_compose() {
+    let printed = vec![
+        "Le gar\u{e7}on a r\u{e9}v\u{e9}l\u{e9} son id\u{e9}e".into(),
+        "pr\u{e8}s du ch\u{e2}teau na\u{ef}f".into(),
+        "pour retirer le dossier avant midi".into(),
+    ];
+    let layer = vec!["Le gar?on a r?v?l? son id?e".into(), "pr?s du chateau naif".into(), "pour retirer le dossier avant midi".into()];
+    let spec = Spec { lines: printed, layer_lines: Some(layer), page: (380.0, 170.0), dpi: 300.0, ..Spec::default() };
+    let (_, doc) = fixture(&spec);
+    let an = analyze(&doc, 0).unwrap();
+    use crate::borrow::Mark;
+    for m in [Mark::Acute, Mark::Grave, Mark::Circumflex, Mark::Diaeresis] {
+        assert!(an.marks.has(m), "{m:?} not found");
+    }
+    // The a of "chateau" carries a circumflex: it is not drawn as a bare a.
+    let bank = an.bank(an.lines[1].style).unwrap();
+    assert!(bank.samples.iter().filter(|s| s.line == 1 && s.ch == 'a').any(|s| s.confidence < 0.2), "the \u{e2} read as a stays usable");
+    for with in ["d\u{e9}pit", "pr\u{e8}s", "h\u{f4}tel", "no\u{eb}l"] {
+        let target = Target::Find { text: "dossier".into(), occurrence: 0 };
+        let (_, report) = preview(&an, &target, with, &Options::default()).unwrap_or_else(|e| panic!("{with}: {e}"));
+        assert!(report.borrowed.iter().any(|b| b.contains("composed")), "{with}: {:?}", report.borrowed);
+    }
+}
+
 #[test]
 fn french_accents_compose_from_the_page() {
     let spec = Spec {

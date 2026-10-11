@@ -504,6 +504,31 @@ pub(crate) fn edit_line(an: &Analysis, li: usize, new_text: &str, opts: &Options
     }
     let window = ((line.x_height * 2.4) as usize).clamp(15, 301) | 1;
     let other = segment::binarize(raster, work, window).dilate(r);
+    // Just outside the erased ink, pixels darker than the paper are the removed letters' halo
+    // (JPEG ringing, scanner blur): left, they'd outline the old text and the fill would pull
+    // their grey inwards. They go with the ink.
+    {
+        let mut paper: Vec<f64> = (0..wh)
+            .flat_map(|y| (0..ww).map(move |x| (x, y)))
+            .filter(|&(x, y)| !erase.get(x, y) && !other.get(x, y) && !protected.get(x, y))
+            .map(|(x, y)| f64::from(raster.luma(work.x0 + x, work.y0 + y)))
+            .collect();
+        if !paper.is_empty() {
+            let med = crate::raster::median(&mut paper);
+            let mut dev: Vec<f64> = paper.iter().map(|v| (v - med).abs()).collect();
+            let mad = crate::raster::median(&mut dev);
+            let dark = (med - (3.0 * 1.4826 * mad).max(6.0)) as f32;
+            let ring = erase.dilate(r.max(2));
+            for y in 0..wh {
+                for x in 0..ww {
+                    if ring.get(x, y) && !erase.get(x, y) && !other.get(x, y) && !protected.get(x, y) && raster.luma(work.x0 + x, work.y0 + y) < dark
+                    {
+                        erase.set(x, y, true);
+                    }
+                }
+            }
+        }
+    }
     let mut known = Mask::new(ww, wh);
     for (k, slot) in known.data.iter_mut().enumerate() {
         *slot = !(erase.data.get(k).copied().unwrap_or(false) || other.data.get(k).copied().unwrap_or(false));

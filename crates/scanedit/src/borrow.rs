@@ -215,14 +215,166 @@ fn split_mark(s: &Sample, base: char, mark: Mark) -> Option<MarkSample> {
     Some(MarkSample { mark, alpha, ink, dx: sx_m / mass_m - sx_b / mass_b, gap: gap.max(0.0), x_height: xh, line: s.line })
 }
 
-/// The diacritics of every style's accented letters, and the dots of i and j.
-pub(crate) fn marks(banks: &[Bank]) -> Marks {
+/// Letters with nothing above their x-height: ink there is a diacritic the text layer left out
+/// (an OCR that reads é as e).
+fn bare_below_x_height(c: char) -> bool {
+    matches!(c, 'a' | 'c' | 'e' | 'm' | 'n' | 'o' | 'r' | 's' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z')
+}
+
+/// Labels an OCR gives to letters it can't read.
+fn unknown(c: char) -> bool {
+    c == '?' || c == '\u{FFFD}'
+}
+
+/// A piece of ink: its pixels.
+type Piece = Vec<(usize, usize)>;
+
+/// Pieces of ink (8-connected, coverage > 0.35) of a sample.
+fn pieces(a: &Plane) -> Vec<Piece> {
+    const MAX_PIECES: usize = 16;
+    let on = |x: usize, y: usize| a.get(x, y) > 0.35;
+    let mut seen = vec![false; a.data.len()];
+    let mut out = Vec::new();
+    for y0 in 0..a.height {
+        for x0 in 0..a.width {
+            let i0 = y0 * a.width + x0;
+            if !on(x0, y0) || seen.get(i0).copied().unwrap_or(true) {
+                continue;
+            }
+            if out.len() >= MAX_PIECES {
+                return out;
+            }
+            let mut piece = Vec::new();
+            let mut stack = vec![(x0, y0)];
+            if let Some(v) = seen.get_mut(i0) {
+                *v = true;
+            }
+            while let Some((x, y)) = stack.pop() {
+                piece.push((x, y));
+                for (dx, dy) in [(-1i64, -1i64), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+                    let (Some(nx), Some(ny)) = (x.checked_add_signed(dx as isize), y.checked_add_signed(dy as isize)) else { continue };
+                    if nx >= a.width || ny >= a.height || !on(nx, ny) {
+                        continue;
+                    }
+                    if let Some(v) = seen.get_mut(ny * a.width + nx)
+                        && !*v
+                    {
+                        *v = true;
+                        stack.push((nx, ny));
+                    }
+                }
+            }
+            out.push(piece);
+        }
+    }
+    out
+}
+
+/// The diacritic over a letter, told from its shape alone (for letters the text layer didn't
+/// name, or named without their accent): the pieces of ink wholly above the letter's body,
+/// separated from it. Returns the mark and whether the body is a capital. `None` when there is
+/// no such ink, or its shape isn't clearly one mark (refusing beats a wrong accent).
+fn mark_by_shape(s: &Sample) -> Option<(Mark, bool)> {
+    let xh = s.x_height.max(1.0);
+    let row_rel = |r: usize| s.top + r as f64 + 0.5;
+    let all = pieces(&s.alpha);
+    let min_px = ((0.004 * xh * xh).round() as usize).max(2);
+    let all: Vec<Piece> = all.into_iter().filter(|p| p.len() >= min_px).collect();
+    // The body reaches down to the baseline region; marks float above it.
+    let low = |p: &[(usize, usize)]| p.iter().map(|q| row_rel(q.1)).fold(f64::MIN, f64::max);
+    let high = |p: &[(usize, usize)]| p.iter().map(|q| row_rel(q.1)).fold(f64::MAX, f64::min);
+    let (body, above): (Vec<&Piece>, Vec<&Piece>) = all.iter().partition(|p| low(p) > -0.5 * xh);
+    let body_top = body.iter().map(|p| high(p)).fold(f64::MAX, f64::min);
+    if body.is_empty() || above.is_empty() || !body_top.is_finite() {
+        return None;
+    }
+    let upper = -body_top > 1.2 * xh;
+    let marks: Vec<&&Piece> = above.iter().filter(|p| low(p) < body_top - 0.04 * xh).collect();
+    if marks.len() != above.len() {
+        return None;
+    }
+    let bbox = |p: &[(usize, usize)]| {
+        let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
+        for &(x, y) in p {
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+        }
+        (x0, y0, x1 + 1 - x0.min(x1 + 1), y1 + 1 - y0.min(y1 + 1))
+    };
+    let dotlike = |p: &[(usize, usize)]| {
+        let (_, _, w, h) = bbox(p);
+        let aspect = w as f64 / h.max(1) as f64;
+        let fill = p.len() as f64 / (w * h).max(1) as f64;
+        (0.55..=1.8).contains(&aspect) && fill >= 0.45 && (w.max(h) as f64) < 0.45 * xh
+    };
+    let mark = match marks.as_slice() {
+        [a, b] => {
+            let ((ax, ay, aw, ah), (bx, by, bw, bh)) = (bbox(a), bbox(b));
+            let side_by_side = ax + aw <= bx || bx + bw <= ax;
+            let level = ay < by + bh && by < ay + ah;
+            let alike = (a.len().max(b.len()) as f64) < 2.5 * a.len().min(b.len()).max(1) as f64;
+            (side_by_side && level && alike && dotlike(a) && dotlike(b)).then_some(Mark::Diaeresis)?
+        }
+        [p] => {
+            let (x0, y0, w, h) = bbox(p);
+            let n = p.len() as f64;
+            let (mx, my) = (p.iter().map(|q| q.0 as f64).sum::<f64>() / n, p.iter().map(|q| q.1 as f64).sum::<f64>() / n);
+            let cov = p.iter().map(|q| (q.0 as f64 - mx) * (q.1 as f64 - my)).sum::<f64>() / n;
+            let var_y = p.iter().map(|q| (q.1 as f64 - my).powi(2)).sum::<f64>() / n;
+            // Horizontal shift per row going down (image rows grow downwards).
+            let slant = if var_y > 0.0 { cov / var_y } else { 0.0 };
+            // Two legs at the bottom: a circumflex (a tilde or macron has one run there).
+            let legs = (y0 + h - h.div_ceil(3)..y0 + h).any(|y| {
+                let row: Vec<bool> = (x0..x0 + w).map(|x| p.contains(&(x, y))).collect();
+                row.windows(2).filter(|w| w[0] && !w[1]).count() + usize::from(row.last() == Some(&true)) >= 2
+            });
+            if w as f64 >= 1.2 * h as f64 && slant.abs() < 0.4 && legs {
+                Mark::Circumflex
+            } else if dotlike(p) && slant.abs() < 0.3 {
+                Mark::Dot
+            } else if slant < -0.3 && h >= 2 {
+                Mark::Acute
+            } else if slant > 0.3 && h >= 2 {
+                Mark::Grave
+            } else {
+                return None;
+            }
+        }
+        _ => return None,
+    };
+    Some((mark, upper))
+}
+
+/// The diacritics of every style's accented letters, and the dots of i and j. Letters that
+/// carry a diacritic their label leaves out (é read as e, or as ?) lend their mark and are no
+/// longer drawn as the bare letter.
+pub(crate) fn marks(banks: &mut [Bank]) -> Marks {
     let mut out = Marks::default();
     for bank in banks {
-        for s in bank.samples.iter().filter(|s| s.confidence >= 0.5) {
+        // A letter whose label left out its accent looks unlike the others of that label (and
+        // may be flagged a suspect already): its mark is judged by shape, whatever its confidence.
+        for s in bank.samples.iter_mut() {
             let found = match decompose(s.ch) {
+                Some(_) if s.confidence < 0.5 => None,
                 Some((base, mark)) => split_mark(s, base, mark),
-                None if s.ch == 'i' || s.ch == 'j' => split_mark(s, s.ch, Mark::Dot),
+                None if (s.ch == 'i' || s.ch == 'j') && s.confidence < 0.5 => None,
+                None if s.ch == 'i' || s.ch == 'j' => match mark_by_shape(s) {
+                    Some((Mark::Dot, _)) => split_mark(s, s.ch, Mark::Dot),
+                    // An ï or î read as i: its mark, and not to be drawn as an i.
+                    Some((mark, _)) => {
+                        let m = split_mark(s, s.ch, mark);
+                        s.confidence = s.confidence.min(0.05);
+                        m
+                    }
+                    None => None,
+                },
+                None if bare_below_x_height(s.ch) || unknown(s.ch) => match mark_by_shape(s) {
+                    Some((Mark::Dot, _)) | None => None,
+                    Some((mark, upper)) => {
+                        let m = split_mark(s, if upper { 'E' } else { 'e' }, mark);
+                        s.confidence = s.confidence.min(0.05);
+                        m
+                    }
+                },
                 None => None,
             };
             if let Some(m) = found {
