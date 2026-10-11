@@ -234,12 +234,24 @@ text): 0.90–0.97 on eight cases, up from 0.83–0.96. Zero pixels outside the 
   this work: a forged page-tree `/Count` made the vendored lopdf preallocate 48 GB. That is
   fixed, with regression test `inspect::tests::a_forged_page_count_does_not_preallocate`. A
   second 300 s run did 103,000 runs with no crash and no hang.
-- **Binaries**: built by `.github/workflows/scan-edit-rc.yml` on the `scan-edit-rc1` tag; see
-  the release page. The Linux job checks the AppImage and runs OCR and a scan edit with the
-  packaged CLI. The Windows job checks the portable zip (models present, CLI runs, scan tools
-  listed). On a clean Windows machine, the GUI launch is subject to SmartScreen
-  (unsigned build).
+- **Binaries**: the pre-release
+  [`scan-edit-rc1`](https://github.com/Amoxcine/OCR-ng/releases/tag/scan-edit-rc1) was built
+  by `.github/workflows/scan-edit-rc.yml`, with all three jobs green. It holds:
+  `pdfcraft-0.6.0-windows-x64-portable.zip`, `pdfcraft-0.6.0-windows-x64.msi`,
+  `pdfcraft-0.6.0-linux-x86_64.AppImage` (+ `.zsync`) and `pdfcraft-0.6.0-linux-x86_64.tar.gz`,
+  all with the OCR models and their attributions. The session's git proxy doesn't accept tag
+  pushes, so the workflow also runs from a `release/scan-edit-rc*` branch, and the pre-release
+  creates the tag at that commit (`95ddb8e`).
+  - **Linux**: the CI job checks the AppImage and runs OCR and a scan edit with the packaged
+    CLI. Separately, the **published AppImage** was downloaded (SHA-256 matching the release
+    digest), extracted, and run with a clean profile under Xvfb. In the GUI it recognised the
+    French JPEG scan, then the line `blond qui fume sur son île` → `blond qui dort sur son île`
+    was edited (î composed), applied and saved. The saved file reads back the new text and no
+    longer holds the original JPEG.
+  - **Windows**: the CI job checks the portable zip (models present, `pdfcraft-cli.exe` runs,
+    scan tools listed). The GUI was not launched on a clean Windows machine in this session;
+    expect SmartScreen, since the build is unsigned.
 
 ## Revision history
 
-- 2026-10-11: first version.
+- 2026-10-11: first version; gates and binaries filled in after the tag.
