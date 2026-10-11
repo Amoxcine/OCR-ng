@@ -211,7 +211,7 @@ text): 0.90–0.97 on eight cases, up from 0.83–0.96. Zero pixels outside the 
 | 4 | Accents composed from base + diacritic found elsewhere | met |
 | 5 | No crash; fuzzing covers the new paths, findings have regression tests | met (see *Gates*) |
 | 6 | `cargo xtask ci` green on the resynced branch | met |
-| 7 | Windows and Linux binaries launch with the feature usable | see *Gates* |
+| 7 | Windows and Linux binaries launch on a clean machine with the feature usable | Linux: met (published AppImage, clean profile, GUI edit). Windows: packaged and checked by CI; GUI launch on a clean Windows machine still to be confirmed by a tester |
 | 8 | This report | present |
 
 ## Gates
