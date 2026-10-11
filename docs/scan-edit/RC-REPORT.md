@@ -209,14 +209,36 @@ text): 0.90–0.97 on eight cases, up from 0.83–0.96. Zero pixels outside the 
 | 2 | Zero pixels outside the zone on tests and R5 documents | met |
 | 3 | Old text absent from the saved file, JPEG included | met (full rewrite; original JPEG bytes absent) |
 | 4 | Accents composed from base + diacritic found elsewhere | met |
-| 5 | No crash; fuzzing covers the new paths, findings have regression tests | see *Gates* |
-| 6 | `cargo xtask ci` green on the resynced branch | see *Gates* |
+| 5 | No crash; fuzzing covers the new paths, findings have regression tests | met (see *Gates*) |
+| 6 | `cargo xtask ci` green on the resynced branch | met |
 | 7 | Windows and Linux binaries launch with the feature usable | see *Gates* |
 | 8 | This report | present |
 
 ## Gates
 
-Filled in when the release candidate is tagged; see the revision history.
+- **Resync**: upstream `main` merged into `scan-edit/s0-s4` before the tag (a merge, not a
+  rebase, so the branch's history stays valid for anyone who fetched it). The conflicts were
+  concurrent additions: the progress log, the 15 translation catalogs (`ATTRIBUTION.toml`
+  hashes recomputed), engine tests, and the vendored-crate table. The merge brought one lint
+  that clippy 1.97 rejects in upstream code (`camera_edges.rs`), fixed in the equivalent form.
+- **`cargo xtask ci`**: all 8 steps pass on the resynced branch: fmt, clippy `-D warnings`, the
+  workspace tests, layers, wasm, assets, deny and parity. It ran without the OCR models
+  installed, as on upstream CI. The full run under load exposed one interface issue, now fixed:
+  a click on a plain picture was being held while the page was read.
+- **Upstream test with the models installed (out of scope, reported, not masked)**:
+  `engine::tests::recognize_text_makes_a_scanned_page_searchable` fails when the ocrs models are
+  installed, because the recognised text reads "the auick brown fox…". Without models it is
+  skipped. Nothing in this work touches it.
+- **Fuzzing** (`cargo xtask fuzz`, which now analyses and edits scanned pages, with a synthetic
+  scanned seed): a first 300 s run found two crashes. Both came from one cause, upstream of
+  this work: a forged page-tree `/Count` made the vendored lopdf preallocate 48 GB. That is
+  fixed, with regression test `inspect::tests::a_forged_page_count_does_not_preallocate`. A
+  second 300 s run did 103,000 runs with no crash and no hang.
+- **Binaries**: built by `.github/workflows/scan-edit-rc.yml` on the `scan-edit-rc1` tag; see
+  the release page. The Linux job checks the AppImage and runs OCR and a scan edit with the
+  packaged CLI. The Windows job checks the portable zip (models present, CLI runs, scan tools
+  listed). On a clean Windows machine, the GUI launch is subject to SmartScreen
+  (unsigned build).
 
 ## Revision history
 
